@@ -1,0 +1,21 @@
+# 1. Ignore Node Dependencies (Heavy)
+node_modules/
+
+# 2. Ignore Environment Variables (Secrets)
+.env
+.env.local
+.env.production
+
+# 3. Ignore Databases (User Data)
+*.db
+*.sqlite
+*.sqlite3
+/secure_data/certificates.db
+
+# 4. Ignore Logs
+*.log
+npm-debug.log
+
+# 5. OS Files
+.DS_Store
+Thumbs.db
