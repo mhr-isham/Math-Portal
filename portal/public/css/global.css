@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    height: 100%;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background-color: var(--bg-default);
+    color: var(--text-main);
+    height: 100%;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background-image: 
+        linear-gradient(rgba(131, 131, 134, 0) 29px, var(--grid-color) 29px, var(--grid-color) 30px),
+        linear-gradient(90deg, rgba(131, 131, 134, 0) 29px, var(--grid-color) 29px, var(--grid-color) 30px);
+    background-size: 30px 30px;
+    background-position: 0 0;
+}
+
+.btn-primary {
+    background-color: var(--purple-main);
+    color: white;
+}
+.btn-primary:hover {
+    background-color: var(--purple-dark);
+}
+
+.card {
+    background-color: var(--bg-paper);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}

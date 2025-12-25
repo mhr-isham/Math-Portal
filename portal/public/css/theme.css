@@ -1,0 +1,29 @@
+:root {
+    --purple-lowLight: #e8edff;
+    --purple-light:    #8f8cf3;
+    --purple-midLight: #604cbbbb;
+    --purple-main:     #786fef;
+    --purple-dark:     #4e2fc4;
+    --purple-deepDark: #845bf3b0;
+
+    --green-main:      #21e82a;
+    --red-main:        #d32f2f;
+
+    --bg-default: #14141a;
+    --bg-paper:   rgba(20, 20, 26, 0.95);
+    
+    --text-main:      #ffffff;
+    --text-light:     #ddd;
+    --text-lowLight:  #bfbfbf;
+    --text-hint:      #3e25b9;
+
+    --grid-color: rgba(131, 131, 134, 0.08);
+}
+
+body.light-mode {
+    --bg-default: #fbfbfb;
+    --bg-paper:   #ffffff;
+    --text-main:  #000000;
+    --text-light: #545454;
+    --grid-color: rgba(131, 131, 134, 0.15);
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verifying Account...</title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/global.css">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; }
+        .card { max-width: 400px; padding: 40px; width: 100%; }
+        .icon { font-size: 3rem; margin-bottom: 20px; display: block; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span id="icon" class="icon">⏳</span>
+        <h2 id="status">Verifying...</h2>
+        <p id="message" style="color:var(--text-secondary); margin-bottom: 20px;">Please wait while we verify your token.</p>
+        <button id="loginBtn" class="btn-primary" style="display:none;" onclick="window.location.href='/'">Go to Login</button>
+    </div>
+
+    <script>
+        window.onload = async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const status = document.getElementById('status');
+            const message = document.getElementById('message');
+            const icon = document.getElementById('icon');
+            const btn = document.getElementById('loginBtn');
+
+            if (!token) {
+                status.innerText = "Error";
+                message.innerText = "Invalid link. Please try registering again.";
+                icon.innerText = "❌";
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: token })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    icon.innerText = "✅";
+                    status.innerText = "Verified!";
+                    message.innerText = "Your account is active. You can now login.";
+                    btn.style.display = "block";
+                } else {
+                    icon.innerText = "❌";
+                    status.innerText = "Failed";
+                    message.innerText = data.error;
+                }
+            } catch (err) {
+                icon.innerText = "⚠️";
+                status.innerText = "Network Error";
+                message.innerText = "Could not connect to the server.";
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NDMC Portal</title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/global.css">
+    <style>
+        .form-container { width: 100%; max-width: 420px; padding: 30px; margin: 20px; }
+        
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); }
+        .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: var(--text-secondary); font-weight: 600; }
+        .tab.active { color: var(--purple-main); border-bottom: 2px solid var(--purple-main); }
+        
+        .form-section { display: none; }
+        .form-section.active { display: block; }
+        
+        .error-border { border-color: var(--red-main) !important; box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.2); }
+        .success-msg { color: var(--green-main); text-align: center; margin-top: 10px; }
+        .error-msg { color: var(--red-main); text-align: center; margin-top: 10px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+    <div class="card form-container">
+        <div class="tabs" id="authTabs">
+            <div class="tab active" onclick="switchTab('login')">Login</div>
+            <div class="tab" onclick="switchTab('register')">Register</div>
+        </div>
+
+        <div id="loginForm" class="form-section active">
+            <h2 style="text-align:center; margin-bottom:20px;">Welcome Back</h2>
+            <form onsubmit="handleLogin(event)">
+                <input type="text" id="loginId" placeholder="Email or Username" required>
+                <input type="password" id="loginPass" placeholder="Password" required>
+                
+                <div style="text-align:right; margin-bottom:10px;">
+                    <span style="color:var(--text-secondary); font-size:0.8rem; cursor:pointer;" onclick="showForgot()">Forgot Password?</span>
+                </div>
+            
+                <button type="submit" class="btn-primary">Login</button>
+                <p id="loginMsg" class="error-msg"></p>
+            </form>
+        </div>
+
+        <div id="registerForm" class="form-section">
+            <h2 style="text-align:center; margin-bottom:20px;">Create Account</h2>
+            <form onsubmit="handleRegister(event)">
+                <input type="text" id="regName" placeholder="Full Name" required>
+                <input type="text" id="regUser" placeholder="Username" required>
+                <input type="email" id="regEmail" placeholder="Email Address" required>
+                <input type="password" id="regPass" placeholder="Password" required>
+                <input type="password" id="regConfirm" placeholder="Confirm Password" required>
+                <button type="submit" class="btn-primary">Continue</button>
+                <p id="regMsg" class="error-msg"></p>
+            </form>
+        </div>
+
+        <div id="step2Form" class="form-section">
+            <h2 style="text-align:center; margin-bottom:10px;">Complete Profile</h2>
+            <p style="text-align:center; color:var(--text-secondary); margin-bottom:20px; font-size:0.9em;">Tell us a bit more about yourself.</p>
+            <form onsubmit="handleStep2(event)">
+                <input type="hidden" id="step2Username"> <select id="studyLevel" onchange="toggleInstitute()" required style="width:100%; padding:12px; margin-bottom:15px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-main); border-radius:8px;">
+                    <option value="" disabled selected>Select Study Level</option>
+                    <option value="Preschool">Preschool</option>
+                    <option value="1">Class 1</option>
+                    <option value="2">Class 2</option>
+                    <option value="3">Class 3</option>
+                    <option value="4">Class 4</option>
+                    <option value="5">Class 5</option>
+                    <option value="6">Class 6</option>
+                    <option value="7">Class 7</option>
+                    <option value="8">Class 8</option>
+                    <option value="9">Class 9</option>
+                    <option value="10">Class 10</option>
+                    <option value="bachelors">Bachelors</option>
+                    <option value="masters">Masters</option>
+                    <option value="open">Open Category</option>
+                </select>
+
+                <input type="text" id="institute" placeholder="Institute Name">
+                <input type="text" id="phone" placeholder="Phone No (Optional)">
+                <textarea id="bio" placeholder="Short Bio" rows="3" style="width:100%; padding:12px; margin-bottom:15px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-main); border-radius:8px;"></textarea>
+
+                <button type="submit" class="btn-primary">Finish Setup</button>
+                <p id="step2Msg" class="error-msg"></p>
+            </form>
+        </div>
+        <div id="forgotForm" class="form-section">
+            <h2 style="text-align:center;">Reset Password</h2>
+            
+            <div id="resetStage1">
+                <p class="subtitle">Enter your details to receive an OTP.</p>
+                <form onsubmit="handleResetRequest(event)">
+                    <input type="text" id="resetUser" placeholder="Username" required>
+                    <input type="email" id="resetEmail" placeholder="Email Address" required>
+                    <button type="submit" class="btn-primary">Send OTP</button>
+                </form>
+            </div>
+        
+            <div id="resetStage2" style="display:none;">
+                <p class="subtitle">Check your email for the code.</p>
+                <form onsubmit="handleResetConfirm(event)">
+                    <input type="text" id="resetOtp" placeholder="Enter 6-digit OTP" required>
+                    <input type="password" id="resetNewPass" placeholder="New Password" required>
+                    <input type="password" id="resetConfirmPass" placeholder="Confirm New Password" required>
+                    <button type="submit" class="btn-primary">Change Password</button>
+                </form>
+            </div>
+            
+            <p id="resetMsg" class="error-msg"></p>
+            <p style="text-align:center; margin-top:15px; cursor:pointer; color:var(--primary-main);" onclick="switchTab('login')">Back to Login</p>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.form-section').forEach(f => f.style.display = 'none');
+            
+            if(tab === 'login') {
+                document.getElementById('loginForm').style.display = 'block';
+                document.querySelectorAll('.tab')[0].classList.add('active');
+            } else {
+                document.getElementById('registerForm').style.display = 'block';
+                document.querySelectorAll('.tab')[1].classList.add('active');
+            }
+            document.getElementById('authTabs').style.display = (tab === 'step2') ? 'none' : 'flex';
+        }
+
+        function toggleInstitute() {
+            const level = document.getElementById('studyLevel').value;
+            const instInput = document.getElementById('institute');
+            const mandatory = ['1','2','3','4','5','6','7','8','9','10','bachelors','masters'];
+            
+            if (mandatory.includes(level)) {
+                instInput.required = true;
+                instInput.placeholder = "Institute Name (Required)";
+            } else {
+                instInput.required = false;
+                instInput.placeholder = "Institute Name (Optional)";
+            }
+        }
+
+        function showForgot() {
+    document.querySelectorAll('.form-section').forEach(f => f.style.display = 'none');
+    document.getElementById('forgotForm').style.display = 'block';
+    document.getElementById('authTabs').style.display = 'none';
+}
+
+async function handleResetRequest(e) {
+    e.preventDefault();
+    const msg = document.getElementById('resetMsg');
+    msg.innerText = "Sending...";
+    
+    const user = document.getElementById('resetUser').value;
+    const email = document.getElementById('resetEmail').value;
+
+    try {
+        const res = await fetch('/api/reset-request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ username: user, email: email })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            msg.style.color = 'var(--green-main)';
+            msg.innerText = "✅ OTP Sent!";
+            document.getElementById('resetStage1').style.display = 'none';
+            document.getElementById('resetStage2').style.display = 'block';
+        } else {
+            msg.style.color = 'var(--red-main)';
+            msg.innerText = data.error;
+        }
+    } catch (err) { msg.innerText = "Network Error"; }
+}
+
+async function handleResetConfirm(e) {
+    e.preventDefault();
+    const msg = document.getElementById('resetMsg');
+    const p1 = document.getElementById('resetNewPass').value;
+    const p2 = document.getElementById('resetConfirmPass').value;
+
+    if (p1 !== p2) {
+        msg.innerText = "Passwords do not match";
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/reset-confirm', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                username: document.getElementById('resetUser').value,
+                otp: document.getElementById('resetOtp').value,
+                newPassword: p1
+            })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            alert("Success! Please login with your new password.");
+            switchTab('login');
+        } else {
+            msg.style.color = 'var(--red-main)';
+            msg.innerText = data.error;
+        }
+    } catch (err) { msg.innerText = "Network Error"; }
+}
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const msg = document.getElementById('regMsg');
+            const inputs = document.querySelectorAll('#registerForm input');
+            inputs.forEach(i => i.classList.remove('error-border')); 
+            
+            if (document.getElementById('regPass').value !== document.getElementById('regConfirm').value) {
+                msg.innerText = "Passwords do not match";
+                return;
+            }
+
+            msg.style.color = "var(--text-secondary)";
+            msg.innerText = "Processing...";
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        fullName: document.getElementById('regName').value,
+                        username: document.getElementById('regUser').value,
+                        email: document.getElementById('regEmail').value,
+                        password: document.getElementById('regPass').value
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.status === 409) { 
+                    msg.style.color = "var(--red-main)";
+                    msg.innerText = data.error;
+                    if(data.field === 'email') document.getElementById('regEmail').classList.add('error-border');
+                    if(data.field === 'username') document.getElementById('regUser').classList.add('error-border');
+                } else if (res.ok) {
+                    msg.style.color = "var(--green-main)";
+                    msg.innerHTML = "✅ " + data.message;
+                    document.getElementById('registerForm').reset();
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (err) {
+                msg.style.color = "var(--red-main)";
+                msg.innerText = err.message || "Network Error";
+            }
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const msg = document.getElementById('loginMsg');
+            msg.innerText = "Checking...";
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        identifier: document.getElementById('loginId').value,
+                        password: document.getElementById('loginPass').value
+                    })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    if (data.redirect === 'step2') {
+                        document.getElementById('step2Username').value = data.username;
+                        document.querySelectorAll('.form-section').forEach(f => f.style.display = 'none');
+                        document.getElementById('step2Form').style.display = 'block';
+                        document.getElementById('authTabs').style.display = 'none';
+                    } else {
+                        window.location.href = "/dashboard.html"; 
+                        alert("Logged in! Redirecting to Dashboard...");
+                    }
+                } else {
+                    msg.innerText = "❌ " + data.error;
+                }
+            } catch (err) {
+                msg.innerText = "Network Error";
+            }
+        }
+
+        async function handleStep2(e) {
+            e.preventDefault();
+            const msg = document.getElementById('step2Msg');
+            msg.innerText = "Saving...";
+
+            try {
+                const res = await fetch('/api/complete-profile', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        username: document.getElementById('step2Username').value,
+                        studyLevel: document.getElementById('studyLevel').value,
+                        institute: document.getElementById('institute').value,
+                        phone: document.getElementById('phone').value,
+                        bio: document.getElementById('bio').value
+                    })
+                });
+                const data = await res.json();
+
+                if(res.ok) {
+                    alert("Profile Completed! Redirecting...");
+                    window.location.href = "/dashboard.html";
+                } else {
+                    msg.innerText = data.error;
+                }
+            } catch (err) { msg.innerText = "Error saving profile"; }
+        }
+    </script>
+</body>
+</html>
