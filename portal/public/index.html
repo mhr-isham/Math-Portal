@@ -8,7 +8,10 @@
     <link rel="stylesheet" href="css/global.css">
     <style>
         .form-container { width: 100%; max-width: 420px; padding: 30px; margin: 20px; }
-        
+        select, option {background-color: #1a1a2e !important;color: white !important;}
+        select {-webkit-appearance: none;-moz-appearance: none;appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;background-position: right .7em top 50%;background-size: .65em auto;}
         .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); }
         .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: var(--text-secondary); font-weight: 600; }
         .tab.active { color: var(--purple-main); border-bottom: 2px solid var(--purple-main); }
@@ -46,7 +49,7 @@
 
         <div id="registerForm" class="form-section">
             <h2 style="text-align:center; margin-bottom:20px;">Create Account</h2>
-            <form onsubmit="handleRegister(event)">
+            <form id="regFormTag" onsubmit="handleRegister(event)">
                 <input type="text" id="regName" placeholder="Full Name" required>
                 <input type="text" id="regUser" placeholder="Username" required>
                 <input type="email" id="regEmail" placeholder="Email Address" required>
@@ -74,6 +77,8 @@
                     <option value="8">Class 8</option>
                     <option value="9">Class 9</option>
                     <option value="10">Class 10</option>
+                    <option value="11">Class 11</option>
+                    <option value="12">Class 12</option>
                     <option value="bachelors">Bachelors</option>
                     <option value="masters">Masters</option>
                     <option value="open">Open Category</option>
@@ -132,7 +137,7 @@
         function toggleInstitute() {
             const level = document.getElementById('studyLevel').value;
             const instInput = document.getElementById('institute');
-            const mandatory = ['1','2','3','4','5','6','7','8','9','10','bachelors','masters'];
+            const mandatory = ['1','2','3','4','5','6','7','8','9','10','bachelors','11','12','masters'];
             
             if (mandatory.includes(level)) {
                 instInput.required = true;
@@ -210,10 +215,11 @@ async function handleResetConfirm(e) {
     } catch (err) { msg.innerText = "Network Error"; }
 }
 
-        async function handleRegister(e) {
+async function handleRegister(e) {
             e.preventDefault();
             const msg = document.getElementById('regMsg');
             const inputs = document.querySelectorAll('#registerForm input');
+            
             inputs.forEach(i => i.classList.remove('error-border')); 
             
             if (document.getElementById('regPass').value !== document.getElementById('regConfirm').value) {
@@ -246,7 +252,9 @@ async function handleResetConfirm(e) {
                 } else if (res.ok) {
                     msg.style.color = "var(--green-main)";
                     msg.innerHTML = "✅ " + data.message;
-                    document.getElementById('registerForm').reset();
+                    
+                    document.getElementById('regFormTag').reset();
+                    
                 } else {
                     throw new Error(data.error);
                 }
@@ -273,15 +281,15 @@ async function handleResetConfirm(e) {
                 const data = await res.json();
 
                 if (res.ok) {
+                    localStorage.setItem('authToken', data.token);
                     if (data.redirect === 'step2') {
-                        document.getElementById('step2Username').value = data.username;
-                        document.querySelectorAll('.form-section').forEach(f => f.style.display = 'none');
-                        document.getElementById('step2Form').style.display = 'block';
-                        document.getElementById('authTabs').style.display = 'none';
-                    } else {
-                        window.location.href = "/dashboard.html"; 
-                        alert("Logged in! Redirecting to Dashboard...");
-                    }
+            document.querySelectorAll('.form-section').forEach(f => f.style.display = 'none');
+            document.getElementById('step2Form').style.display = 'block';
+            document.getElementById('authTabs').style.display = 'none';
+        } else {
+                    window.location.href = "/dashboard.html"; 
+                    alert("Logged in! Redirecting to Dashboard...");
+                }
                 } else {
                     msg.innerText = "❌ " + data.error;
                 }
@@ -295,12 +303,16 @@ async function handleResetConfirm(e) {
             const msg = document.getElementById('step2Msg');
             msg.innerText = "Saving...";
 
+            const token = localStorage.getItem('authToken');
+
             try {
                 const res = await fetch('/api/complete-profile', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
                     body: JSON.stringify({
-                        username: document.getElementById('step2Username').value,
                         studyLevel: document.getElementById('studyLevel').value,
                         institute: document.getElementById('institute').value,
                         phone: document.getElementById('phone').value,

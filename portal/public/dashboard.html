@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NDMC Dashboard</title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/global.css">
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        html, body {
+            height: auto !important; min-height: 100% !important; overflow-y: scroll !important;
+            margin: 0; padding: 0; width: 100%; 
+            background-color: #0f0f1a; color: white; padding-top: 80px;
+        }
+
+        .header {
+            position: fixed; top: 0; left: 0; width: 100%; height: 70px; z-index: 1000;
+            background: rgba(20, 20, 35, 0.95); border-bottom: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: space-between; padding: 0 40px;
+        }
+        .header h2 { margin: 0; color: var(--purple-main); font-size: 1.5rem; }
+        
+        .nav-links { display: flex; gap: 30px; }
+        .nav-item { cursor: pointer; color: var(--text-secondary); font-weight: 500; transition: color 0.3s; text-decoration: none; font-size: 1rem; }
+        .nav-item:hover { color: white; }
+        .nav-item.active { color: white; border-bottom: 2px solid var(--purple-main); padding-bottom: 5px; }
+
+        .dashboard-container { 
+            max-width: 1000px; margin: 0 auto; padding: 20px; padding-top: 20px; padding-bottom: 150px; 
+            height: auto !important; overflow: visible !important;
+        }
+        
+        .section { display: none; }
+        .section.active { display: block; }
+        
+        .list-item { 
+            background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; transition: background 0.2s;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .list-item:hover { background: rgba(255,255,255,0.1); }
+        .list-title { font-weight: bold; font-size: 1.1rem; }
+        .list-meta { font-size: 0.85rem; color: #aaa; }
+
+        .problem-desc { margin: 15px 0; font-size: 1.1rem; line-height: 1.6; }
+        .problem-img { max-width: 100%; border-radius: 8px; margin: 15px 0; border: 1px solid rgba(255,255,255,0.1); }
+
+        .upload-box { background: rgba(30,30,40,0.8); padding: 30px; border-radius: 15px; border: 1px solid var(--purple-main); }
+        input, select, textarea { 
+            width: 100%; padding: 12px; margin-bottom: 15px; background: rgba(0,0,0,0.2); 
+            border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 5px; font-family: inherit;
+        }
+        select option { background: #1a1a2e; color: white; }
+
+        .math-toolbar { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .math-btn {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; 
+            padding: 5px 10px; cursor: pointer; border-radius: 5px; font-size: 0.9rem; transition: background 0.2s;
+        }
+        .math-btn:hover { background: var(--purple-main); border-color: var(--purple-main); }
+
+        .detail-view { background: rgba(20,20,35,0.95); padding: 30px; border-radius: 10px; border: 1px solid var(--purple-main); }
+        .vote-box { display: flex; gap: 15px; margin-top: 20px; align-items: center; }
+        .vote-btn { cursor: pointer; padding: 5px 15px; border-radius: 5px; border: 1px solid #555; background: transparent; color: white; }
+        .vote-btn.active { background: var(--purple-main); border-color: var(--purple-main); }
+        .solve-stat { background: #111; padding: 10px; border-radius: 5px; display: inline-block; margin-top: 10px; font-size: 0.9rem; color: #ccc; }
+        
+        .filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .filter-select { padding: 8px; border-radius: 5px; background: #1a1a2e; color: white; border: 1px solid #444; }
+
+        .action-btn { font-size: 0.8rem; padding: 5px 10px; border-radius: 5px; cursor: pointer; border: none; }
+        .edit-btn { background: #2196F3; color: white; margin-right: 5px; }
+        .edit-btn:hover { background: #1976D2; }
+        .delete-btn { background: #d32f2f; color: white; }
+        .delete-btn:hover { background: #b71c1c; }
+        .discussion-section { margin-top: 30px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px; }
+        .comment-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 3px solid var(--purple-main); }
+        .comment-header { font-size: 0.85rem; color: #aaa; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .comment-user { color: var(--purple-main); font-weight: bold; }
+        .comment-text { font-size: 0.95rem; line-height: 1.5; color: #eee; }
+        .no-comments { color: #666; font-style: italic; text-align: center; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <h2>NDMC Portal</h2>
+        <nav class="nav-links">
+            <div class="nav-item active" onclick="switchView('general')">Problems</div>
+            
+            <div class="nav-item" id="academicTabBtn" style="display:none;" onclick="switchView('academic')">Upload</div>
+            <div class="nav-item" id="myQuestionsTabBtn" style="display:none;" onclick="switchView('myQuestions')">My Questions</div>
+            
+            <div class="nav-item" onclick="logout()" style="color: #ff6b6b;">Logout</div>
+        </nav>
+    </header>
+
+    <div class="dashboard-container">
+
+        <div id="generalView" class="section active">
+            <div class="filter-bar">
+                <select id="catFilter" class="filter-select" onchange="loadProblems()">
+                    <option value="All">All Categories</option>
+                    <option value="Number Theory">Number Theory</option>
+                    <option value="Combinatorics">Combinatorics</option>
+                    <option value="Geometry">Geometry</option>
+                    <option value="Algebra">Algebra</option>
+                </select>
+            </div>
+            <div id="problemList"><p>Loading...</p></div>
+        </div>
+
+        <div id="detailView" class="section">
+            <button onclick="switchView('general')" style="margin-bottom:15px; background:transparent; border:1px solid #555; color:white; padding:5px 10px; cursor:pointer;">← Back to List</button>
+            <div id="problemContent" class="detail-view"></div>
+        </div>
+
+        <div id="academicView" class="section"></div>
+
+        <div id="myQuestionsView" class="section">
+            <h2>My Authored Questions</h2>
+            <div id="myQuestionsList"><p>Loading...</p></div>
+        </div>
+
+        <div id="editView" class="section">
+            </div>
+
+    </div>
+
+    <script>
+        const token = localStorage.getItem('authToken');
+        let currentProblemId = null;
+        let editingId = null;
+
+        const subCats = {
+            'Algebra': ['Function', 'Polynomial', 'Inequality'],
+            'Combinatorics': ['Counting', 'Probability', 'Graph Theory'],
+            'Number Theory': [],
+            'Geometry': [],
+            'Others': []
+        };
+
+        const mathToolbarHTML = `
+            <div class="math-toolbar">
+                <button type="button" class="math-btn" onclick="insertMath('$...$', 'probDesc')">$ x $</button>
+                <button type="button" class="math-btn" onclick="insertMath('$$...$$', 'probDesc')">$$ x $$</button>
+                <button type="button" class="math-btn" onclick="insertMath('\\\\frac{a}{b}', 'probDesc')">a/b</button>
+                <button type="button" class="math-btn" onclick="insertMath('^{n}', 'probDesc')">xⁿ</button>
+                <button type="button" class="math-btn" onclick="insertMath('\\\\sqrt{x}', 'probDesc')">√x</button>
+                <button type="button" class="math-btn" onclick="insertMath('\\\\ge', 'probDesc')">≥</button>
+                <button type="button" class="math-btn" onclick="insertMath('\\\\cdot', 'probDesc')">·</button>
+            </div>`;
+
+        const academicTemplate = `
+            <div class="upload-box">
+                <h3>Upload New Problem</h3>
+                <form onsubmit="handleUpload(event)">
+                    <input type="text" id="probTitle" placeholder="Problem Title (Required)" required>
+                    
+                    <div style="display:flex; gap:10px;">
+                        <select id="probCat" required style="flex:1;" onchange="updateSubcats('probCat', 'probSub')">
+                            <option value="" disabled selected>Category</option>
+                            <option value="Number Theory">Number Theory</option>
+                            <option value="Combinatorics">Combinatorics</option>
+                            <option value="Geometry">Geometry</option>
+                            <option value="Algebra">Algebra</option>
+                            <option value="Others">Others</option>
+                        </select>
+                        <select id="probSub" style="flex:1;">
+                            <option value="">Subcategory (Optional)</option>
+                        </select>
+                    </div>
+
+                    <label style="font-size:0.9rem; color:#aaa; margin-top:10px; display:block;">Problem Statement</label>
+                    ${mathToolbarHTML}
+                    <textarea id="probDesc" rows="6" placeholder="Description (Use LaTeX)" required></textarea>
+                    
+                    <input type="text" id="probFig" placeholder="Image Link (Optional)">
+                    <input type="text" id="probAns" placeholder="Correct Answer" required>
+                    
+                    <button type="submit" class="btn-primary">Upload</button>
+                    <p id="uploadMsg"></p>
+                </form>
+            </div>
+        `;
+
+        const editTemplate = `
+            <div class="upload-box">
+                <h3>Edit Problem</h3>
+                <form onsubmit="handleEdit(event)">
+                    <input type="text" id="editTitle" placeholder="Title" required>
+                    
+                    <div style="display:flex; gap:10px;">
+                        <select id="editCat" required style="flex:1;" onchange="updateSubcats('editCat', 'editSub')">
+                            <option value="Number Theory">Number Theory</option>
+                            <option value="Combinatorics">Combinatorics</option>
+                            <option value="Geometry">Geometry</option>
+                            <option value="Algebra">Algebra</option>
+                            <option value="Others">Others</option>
+                        </select>
+                        <select id="editSub" style="flex:1;">
+                            <option value="">Subcategory</option>
+                        </select>
+                    </div>
+
+                    <label style="font-size:0.9rem; color:#aaa; margin-top:10px; display:block;">Problem Statement</label>
+                    <div class="math-toolbar">
+                        ${mathToolbarHTML}
+                    </div>
+                    <textarea id="editDesc" rows="6" required></textarea>
+                    
+                    <input type="text" id="editFig" placeholder="Image Link">
+                    
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                    <button type="button" onclick="switchView('myQuestions')" style="background:transparent; border:1px solid #666; color:#ccc; padding:10px 20px; border-radius:5px; margin-left:10px; cursor:pointer;">Cancel</button>
+                    <p id="editMsg"></p>
+                </form>
+            </div>
+        `;
+
+        window.onload = async () => {
+            if (!token) window.location.href = '/index.html';
+
+            try {
+                const res = await fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) throw new Error("Unauthorized");
+                
+                const user = await res.json();
+                
+                if (parseInt(user.category) >= 0) {
+                    document.getElementById('academicTabBtn').style.display = 'block';
+                    document.getElementById('myQuestionsTabBtn').style.display = 'block';
+                    
+                    document.getElementById('academicView').innerHTML = academicTemplate;
+                    document.getElementById('editView').innerHTML = editTemplate;
+                }
+                
+                loadProblems();
+
+            } catch (err) { logout(); }
+        };
+
+        function updateSubcats(catId, subId) {
+            const catVal = document.getElementById(catId).value;
+            const subSelect = document.getElementById(subId);
+            
+
+            subSelect.innerHTML = '<option value="">Subcategory (Optional)</option>';
+            
+
+            const options = subCats[catVal] || [];
+            options.forEach(opt => {
+                const el = document.createElement('option');
+                el.value = opt;
+                el.innerText = opt;
+                subSelect.appendChild(el);
+            });
+        }
+
+        function switchView(view) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            document.getElementById(view + 'View').classList.add('active');
+            
+            if(view === 'general') document.querySelectorAll('.nav-item')[0].classList.add('active');
+            if(view === 'academic') document.getElementById('academicTabBtn').classList.add('active');
+            if(view === 'myQuestions') {
+                document.getElementById('myQuestionsTabBtn').classList.add('active');
+                loadMyQuestions();
+            }
+        }
+
+        async function loadProblems() {
+            const cat = document.getElementById('catFilter').value;
+            const res = await fetch(`/api/problems?category=${cat}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const data = await res.json();
+            
+            document.getElementById('problemList').innerHTML = data.map(p => `
+                <div class="list-item" onclick="openProblem(${p.problem_id})">
+                    <div>
+                        <div class="list-title">${p.title}</div>
+                        <div class="list-meta">${p.category} ${p.subcategory ? '• ' + p.subcategory : ''}</div>
+                    </div>
+                    <div style="color:var(--purple-main);">Solve ➤</div>
+                </div>
+            `).join('');
+            renderMath();
+        }
+
+        async function loadMyQuestions() {
+            const res = await fetch('/api/my-problems', { headers: { 'Authorization': `Bearer ${token}` } });
+            const data = await res.json();
+
+            document.getElementById('myQuestionsList').innerHTML = data.map(p => `
+                <div class="list-item" style="cursor:default;">
+                    <div>
+                        <div class="list-title">${p.title}</div>
+                        <div class="list-meta">${p.category} • Likes: ${p.upvote_count}</div>
+                    </div>
+                    <div>
+                        <button class="action-btn edit-btn" onclick="openEdit(${p.problem_id})">Edit</button>
+                        <button class="action-btn delete-btn" onclick="deleteProblem(${p.problem_id})">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+
+        async function deleteProblem(id) {
+            if(!confirm("Are you sure? This will verify permanently delete the problem and remove it from everyone's solved history.")) return;
+
+            try {
+                const res = await fetch(`/api/problems/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.ok) {
+                    loadMyQuestions();
+                    loadProblems(); 
+                } else {
+                    const data = await res.json();
+                    alert(data.error || "Failed to delete");
+                }
+            } catch (err) {
+                alert("Network Error");
+            }
+        }
+
+        async function openEdit(id) {
+            editingId = id;
+            switchView('edit');
+            
+            const res = await fetch(`/api/problems/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const p = await res.json();
+
+            document.getElementById('editTitle').value = p.title;
+            document.getElementById('editCat').value = p.category;
+            
+            updateSubcats('editCat', 'editSub');
+            
+            document.getElementById('editSub').value = p.subcategory || "";
+            document.getElementById('editDesc').value = p.description;
+            document.getElementById('editFig').value = p.figure_url || "";
+        }
+
+        async function handleEdit(e) {
+            e.preventDefault();
+            const msg = document.getElementById('editMsg');
+            msg.innerText = "Saving...";
+
+            try {
+                const res = await fetch(`/api/problems/${editingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({
+                        title: document.getElementById('editTitle').value,
+                        category: document.getElementById('editCat').value,
+                        subcategory: document.getElementById('editSub').value,
+                        description: document.getElementById('editDesc').value,
+                        figureUrl: document.getElementById('editFig').value
+                    })
+                });
+
+                if(res.ok) {
+                    alert("Problem Updated!");
+                    switchView('myQuestions');
+                } else {
+                    msg.innerText = "Error updating";
+                }
+            } catch(err) { msg.innerText = "Network Error"; }
+        }
+
+        async function handleUpload(e) {
+            e.preventDefault();
+            const msg = document.getElementById('uploadMsg');
+            msg.innerText = "Uploading...";
+            
+            try {
+                const res = await fetch('/api/problems/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({
+                        title: document.getElementById('probTitle').value,
+                        category: document.getElementById('probCat').value,
+                        subcategory: document.getElementById('probSub').value,
+                        description: document.getElementById('probDesc').value,
+                        figureUrl: document.getElementById('probFig').value,
+                        answer: document.getElementById('probAns').value
+                    })
+                });
+                
+                if (res.ok) {
+                    msg.style.color = "var(--green-main)";
+                    msg.innerText = "✅ Uploaded!";
+                    e.target.reset();
+                    updateSubcats('probCat', 'probSub');
+                } else {
+                    const data = await res.json();
+                    msg.style.color = "red";
+                    msg.innerText = data.error;
+                }
+            } catch (err) { msg.innerText = "Network Error"; }
+        }
+
+        function insertMath(symbol, targetId) {
+            const textarea = document.getElementById(targetId); 
+            if(!textarea) return;
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+            textarea.value = text.substring(0, start) + symbol + text.substring(end);
+            textarea.focus();
+        }
+
+        function renderMath() { if (window.MathJax && window.MathJax.typesetPromise) MathJax.typesetPromise(); }
+
+        async function openProblem(id) {
+            currentProblemId = id;
+            switchView('detail');
+            const container = document.getElementById('problemContent');
+            container.innerHTML = "<p>Loading...</p>";
+
+            const res = await fetch(`/api/problems/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const p = await res.json();
+            
+            const liking = p.upvote_count - p.downvote_count;
+            const ratio = p.solve_count > 0 ? ((p.solve_count / p.unique_attempts) * 100).toFixed(1) + '%' : '0%';
+            const figureHTML = p.figure_url ? `<img src="${p.figure_url}" class="problem-img">` : '';
+
+            container.innerHTML = `
+                <h2>${p.title}</h2>
+                <p style="color:#aaa; margin-bottom:20px;">By ${p.author_name} • ${p.category} ${p.subcategory ? '• '+p.subcategory : ''}</p>
+                <div class="problem-desc">${p.description}</div>
+                ${figureHTML}
+                <div class="solve-stat">🧩 User Solve Ratio: ${ratio} (${p.solve_count}/${p.unique_attempts})</div>
+                <div class="vote-box">
+                    <button class="vote-btn ${p.userStatus.isLiked ? 'active' : ''}" onclick="vote('like')">👍 ${p.upvote_count}</button>
+                    <button class="vote-btn ${p.userStatus.isDisliked ? 'active' : ''}" onclick="vote('dislike')">👎 ${p.downvote_count}</button>
+                    <span style="margin-left:10px; color:#aaa;">Net: ${liking}</span>
+                </div>
+                <hr style="border-color:#333; margin:20px 0;">
+                <input type="text" placeholder="Enter your answer" id="userAns">
+                <button class="btn-primary" onclick="submitAnswer()">Submit</button>
+
+                <div class="discussion-section">
+                <h3>Discussion</h3>
+                <div id="commentsList">Loading comments...</div>
+                
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <input type="text" id="newComment" placeholder="Ask a question or discuss..." style="flex:1; margin-bottom:0;">
+                    <button class="btn-primary" onclick="postComment()" style="width:auto; padding:0 20px;">Post</button>
+                </div>
+            </div>
+            `;
+            renderMath();
+            loadComments(id);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        async function loadComments(id) {
+        const list = document.getElementById('commentsList');
+        try {
+            const res = await fetch(`/api/problems/${id}/comments`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const comments = await res.json();
+
+            if (comments.length === 0) {
+                list.innerHTML = `<div class="no-comments">No comments yet. Be the first!</div>`;
+                return;
+            }
+
+            list.innerHTML = comments.map(c => {
+                const date = new Date(c.created_at).toLocaleDateString();
+                const safeContent = escapeHtml(c.content);
+                return `
+                <div class="comment-box">
+                    <div class="comment-header">
+                        <span class="comment-user">${escapeHtml(c.username)}</span>
+                        <span>${date}</span>
+                    </div>
+                    <div class="comment-text">${safeContent}</div>
+                </div>
+                `;
+            }).join('');
+            
+            renderMath();
+
+        } catch (err) {
+            list.innerHTML = "<p>Error loading comments.</p>";
+        }
+    }
+
+    async function postComment() {
+        const input = document.getElementById('newComment');
+        const content = input.value;
+        if (!content.trim()) return;
+
+        const btn = document.querySelector('.discussion-section button');
+        const originalText = btn.innerText;
+        btn.innerText = "...";
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`/api/problems/${currentProblemId}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ content })
+            });
+
+            if (res.ok) {
+                input.value = "";
+                loadComments(currentProblemId); 
+            } else {
+                alert("Failed to post comment");
+            }
+        } catch (err) {
+            alert("Network Error");
+        } finally {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    }
+
+        async function vote(type) {
+            await fetch(`/api/problems/${currentProblemId}/vote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ type })
+            });
+            openProblem(currentProblemId);
+        }
+
+        async function submitAnswer() {
+            const userAns = document.getElementById('userAns').value;
+            const res = await fetch(`/api/problems/${currentProblemId}/check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ userAnswer: userAns })
+            });
+            const data = await res.json();
+            alert(data.message);
+            if(data.correct) openProblem(currentProblemId);
+        }
+
+        function logout() { localStorage.removeItem('authToken'); window.location.href = '/index.html'; }
+    </script>
+</body>
+</html>
