@@ -7,25 +7,59 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const port = process.env.PORT || 3000;
+const { OAuth2Client } = require('google-auth-library');
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const profileStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const dir = 'public/uploads';
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, req.user.userId + '-' + Date.now() + path.extname(file.originalname));
+    }
+});
+const uploadProfile = multer({ storage: profileStorage, limits: { fileSize: 1000000 } });
+
+const problemStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const dir = 'public/uploads/questions/figures';
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, req.user.userId + '-' + Date.now() + path.extname(file.originalname));
+    }
+});
+const uploadProblem = multer({ storage: problemStorage, limits: { fileSize: 2000000 } });
 
 app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
           "default-src": ["'self'"],
-          "script-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+          "script-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://accounts.google.com", "https://g.notify.usercontent.com"],
           "script-src-attr": ["'self'", "'unsafe-inline'"],
           "img-src": ["'self'", "data:", "https:"],
-          "frame-src": ["'self'", "https://www.desmos.com", "https://www.geogebra.org"], 
-          "font-src": ["'self'", "https://cdn.jsdelivr.net", "data:"],
+          "frame-src": ["'self'", "https://www.desmos.com", "https://www.geogebra.org", "https://accounts.google.com"], 
+          "font-src": ["'self'", "https://cdn.jsdelivr.net", "data:", "https://fonts.gstatic.com"],
+          "connect-src": ["'self'", "https://accounts.google.com", "https://www.googleapis.com"]
         },
       },
+      referrerPolicy: {
+        policy: "strict-origin-when-cross-origin",
+      },
+      crossOriginOpenerPolicy: false, 
+      crossOriginEmbedderPolicy: false,
     })
-  );
+);
   app.use(cors());
   app.use(express.json());
   app.use(express.static('public'));
@@ -56,15 +90,123 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-
     if (!token) return res.sendStatus(401);
-
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403);
         req.user = user;
         next();
     });
 }
+
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+app.get('/join', (req, res) => res.sendFile(path.join(__dirname, 'public/join.html')));
+app.get('/problems', (req, res) => res.sendFile(path.join(__dirname, 'public/problems.html')));
+app.get('/problems/:id', (req, res) => res.sendFile(path.join(__dirname, 'public/problem.html')));
+app.get('/profile', (req, res) => res.sendFile(path.join(__dirname, 'public/profile.html')));
+app.get('/academics', (req, res) => res.sendFile(path.join(__dirname, 'public/academic.html')));
+
+app.get('/vcontest', (req, res) => res.send('Virtual Contest Coming Soon'));
+app.get('/hypos', (req, res) => res.send('Admin Dashboard Coming Soon'));
+
+app.post('/api/auth/google', async (req, res) => {
+    const { token } = req.body;
+    
+    try {
+        const ticket = await googleClient.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        const { email, name, sub } = ticket.getPayload();
+
+        const userRes = await pool.query(
+            `SELECT u.*, m.user_category 
+             FROM users u
+             LEFT JOIN user_metadata m ON u.user_id = m.user_id
+             WHERE u.email = $1`, 
+            [email]
+        );
+
+        if (userRes.rows.length > 0) {
+            const user = userRes.rows[0];
+            
+            if (!user.google_id) {
+                let newMethod = user.login_method.includes('google') ? user.login_method : user.login_method + ',google';
+                await pool.query("UPDATE users SET google_id = $1, login_method = $2 WHERE user_id = $3", [sub, newMethod, user.user_id]);
+            }
+
+            const jwtToken = jwt.sign(
+                { userId: user.user_id, username: user.username, category: user.user_category },
+                process.env.JWT_SECRET,
+                { expiresIn: '2h' }
+            );
+
+            return res.json({ action: 'login_success', token: jwtToken });
+
+        } else {
+            return res.json({ 
+                action: 'register_needed', 
+                googleData: { email, name, sub } 
+            });
+        }
+
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: "Invalid Google Token" });
+    }
+});
+
+app.post('/api/auth/google/finalize', async (req, res) => {
+    const { email, fullName, googleId, username, password } = req.body;
+
+    const check = await pool.query("SELECT user_id FROM users WHERE username = $1", [username]);
+    if (check.rows.length > 0) return res.status(409).json({ error: "Username already taken" });
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        let passwordHash = null;
+        let loginMethod = 'google';
+
+        if (password && password.trim() !== "") {
+            const salt = await bcrypt.genSalt(10);
+            passwordHash = await bcrypt.hash(password, salt);
+            loginMethod = 'email,google';
+        }
+
+        const userRes = await client.query(
+            `INSERT INTO users (username, email, password_hash, full_name, login_method, is_verified, google_id) 
+             VALUES ($1, $2, $3, $4, $5, TRUE, $6) 
+             RETURNING user_id`,
+            [username, email, passwordHash, fullName, loginMethod, googleId]
+        );
+        const userId = userRes.rows[0].user_id;
+
+        await client.query(
+            `INSERT INTO user_metadata (user_id, registration_ip, registration_device, user_category, registration_time) 
+             VALUES ($1, $2, $3, '-1', NOW())`,
+            [userId, req.ip, req.headers['user-agent']]
+        );
+        await client.query("INSERT INTO user_stats (user_id, current_rating) VALUES ($1, 0)", [userId]);
+
+        await client.query('COMMIT');
+
+        const token = jwt.sign(
+            { userId: userId, username: username, category: '-1' }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '2h' }
+        );
+
+        res.json({ token });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ error: "Registration Failed" });
+    } finally {
+        client.release();
+    }
+});
 
 app.post('/api/login', async (req, res) => {
     const { identifier, password } = req.body;
@@ -126,7 +268,7 @@ app.post('/api/login', async (req, res) => {
         res.json({ 
             message: "Login successful", 
             token: token, 
-            redirect: user.study_level ? "dashboard" : "step2",
+            redirect: user.study_level ? "/" : "step2",
             username: user.username
         });
 
@@ -140,25 +282,40 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/problems', authenticateToken, async (req, res) => {
-    const { category, subcategory } = req.query;
-    let query = `SELECT problem_id, title, category, subcategory, author_id FROM problems`;
+    const { category, subcategory, sort } = req.query;
+    
+    let query = `
+        SELECT p.*, u.full_name as author_name 
+        FROM problems p
+        JOIN users u ON p.author_id = u.user_id
+    `;
     let params = [];
-    
+    let conditions = [];
+
     if (category && category !== 'All') {
-        query += ` WHERE category = $1`;
+        conditions.push(`p.category = $${params.length + 1}`);
         params.push(category);
-        if (subcategory) {
-            query += ` AND subcategory = $2`;
-            params.push(subcategory);
-        }
     }
-    
-    query += ` ORDER BY created_at DESC`;
+    if (subcategory) {
+        conditions.push(`p.subcategory = $${params.length + 1}`);
+        params.push(subcategory);
+    }
+
+    if (conditions.length > 0) {
+        query += " WHERE " + conditions.join(" AND ");
+    }
+
+    if (sort === 'vote_desc') query += ` ORDER BY (p.upvote_count - p.downvote_count) DESC`;
+    else if (sort === 'vote_asc') query += ` ORDER BY (p.upvote_count - p.downvote_count) ASC`;
+    else if (sort === 'ratio_desc') query += ` ORDER BY (CASE WHEN p.unique_attempts > 0 THEN (p.solve_count::float / p.unique_attempts) ELSE 0 END) DESC`;
+    else if (sort === 'ratio_asc') query += ` ORDER BY (CASE WHEN p.unique_attempts > 0 THEN (p.solve_count::float / p.unique_attempts) ELSE 0 END) ASC`;
+    else query += ` ORDER BY p.created_at DESC`;
 
     try {
         const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: "Failed to fetch problems" });
     }
 });
@@ -168,7 +325,7 @@ app.get('/api/problems/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     try {
         const problemRes = await pool.query(`
-            SELECT p.*, u.username as author_name 
+            SELECT p.*, u.full_name as author_name, u.username 
             FROM problems p
             JOIN users u ON p.author_id = u.user_id
             WHERE p.problem_id = $1
@@ -177,12 +334,7 @@ app.get('/api/problems/:id', authenticateToken, async (req, res) => {
         if (problemRes.rows.length === 0) return res.status(404).json({ error: "Problem not found" });
         
         const problem = problemRes.rows[0];
-        const statsRes = await pool.query(
-            "SELECT liked_posts, disliked_posts FROM user_stats WHERE user_id = $1", 
-            [req.user.userId]
-        );
-        
-        
+        const statsRes = await pool.query("SELECT liked_posts, disliked_posts FROM user_stats WHERE user_id = $1", [req.user.userId]);
         const stats = statsRes.rows[0];
 
         delete problem.answer;
@@ -192,19 +344,24 @@ app.get('/api/problems/:id', authenticateToken, async (req, res) => {
         res.json({ ...problem, userStatus: { isLiked, isDisliked } });
 
     } catch (err) {
-        console.error(err);
         res.status(500).json({ error: "Error details" });
     }
 });
 
-app.post('/api/problems/upload', authenticateToken, async (req, res) => {
-    if (parseInt(req.user.category) < 0) { 
-        return res.status(403).json({ error: "Access denied. Academic privileges required." });
-    }
 
-    const { title, description, answer, category, subcategory, figureUrl } = req.body;
+app.post('/api/problems/upload', authenticateToken, uploadProblem.single('figure'), async (req, res) => {
+    try {
+        const userMeta = await pool.query("SELECT user_category FROM user_metadata WHERE user_id = $1", [req.user.userId]);
+        if (parseInt(userMeta.rows[0]?.user_category) < 0) return res.status(403).json({ error: "Access denied." });
+    } catch (err) { return res.status(500).json({ error: "Auth Error" }); }
+    const { title, description, answer, category, subcategory } = req.body;
     
     if (!title) return res.status(400).json({ error: "Title is required" });
+
+    let figureUrl = null;
+    if (req.file) {
+        figureUrl = `/uploads/questions/figures/${req.file.filename}`;
+    }
 
     try {
         await pool.query(
@@ -298,6 +455,10 @@ app.post('/api/problems/:id/check', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/auth/config', (req, res) => {
+    res.json({ clientId: process.env.GOOGLE_CLIENT_ID });
+});
+
 app.get('/api/my-problems', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
@@ -310,27 +471,26 @@ app.get('/api/my-problems', authenticateToken, async (req, res) => {
     }
 });
 
-app.put('/api/problems/:id', authenticateToken, async (req, res) => {
+app.put('/api/problems/:id', authenticateToken, uploadProblem.single('figure'), async (req, res) => {
     const { id } = req.params;
-    const { title, description, category, subcategory, figureUrl } = req.body;
+    const { title, description, category, subcategory } = req.body;
     
     try {
-        const check = await pool.query("SELECT author_id FROM problems WHERE problem_id = $1", [id]);
+        const check = await pool.query("SELECT author_id, figure_url FROM problems WHERE problem_id = $1", [id]);
         if (check.rows.length === 0) return res.status(404).json({ error: "Problem not found" });
-        if (check.rows[0].author_id !== req.user.userId) return res.status(403).json({ error: "You can only edit your own problems" });
+        if (check.rows[0].author_id !== req.user.userId) return res.status(403).json({ error: "Permission denied" });
+
+        let figureUrl = check.rows[0].figure_url; 
+        if (req.file) {
+            figureUrl = `/uploads/questions/figures/${req.file.filename}`;
+        }
 
         await pool.query(
-            `UPDATE problems 
-             SET title = $1, description = $2, category = $3, subcategory = $4, figure_url = $5 
-             WHERE problem_id = $6`,
+            `UPDATE problems SET title = $1, description = $2, category = $3, subcategory = $4, figure_url = $5 WHERE problem_id = $6`,
             [title, description, category, subcategory, figureUrl, id]
         );
-
         res.json({ message: "Problem updated successfully" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Update failed" });
-    }
+    } catch (err) { res.status(500).json({ error: "Update failed" }); }
 });
 
 app.delete('/api/problems/:id', authenticateToken, async (req, res) => {
@@ -377,13 +537,15 @@ app.delete('/api/problems/:id', authenticateToken, async (req, res) => {
 });
 
 
+
 app.get('/api/problems/:id/comments', authenticateToken, async (req, res) => {
     const { id } = req.params;
     try {
         const result = await pool.query(
-            `SELECT c.comment_id, c.content, c.created_at, u.username, c.user_id 
+            `SELECT c.comment_id, c.content, c.created_at, u.username, m.profile_pic_url 
              FROM comments c
              JOIN users u ON c.user_id = u.user_id
+             LEFT JOIN user_metadata m ON u.user_id = m.user_id
              WHERE c.problem_id = $1
              ORDER BY c.created_at ASC`,
             [id]
@@ -392,31 +554,6 @@ app.get('/api/problems/:id/comments', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to load comments" });
-    }
-});
-
-
-app.post('/api/problems/:id/comments', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const { content } = req.body;
-    
-    if (!content || typeof content !== 'string' || content.trim() === "") {
-        return res.status(400).json({ error: "Invalid comment content" });
-    }
-
-    if (content.length > 1000) {
-        return res.status(400).json({ error: "Comment too long (max 1000 chars)" });
-    }
-
-    try {
-        await pool.query(
-            "INSERT INTO comments (problem_id, user_id, content) VALUES ($1, $2, $3)",
-            [id, req.user.userId, content.trim()]
-        );
-        res.json({ message: "Comment added" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to post comment" });
     }
 });
 
@@ -685,6 +822,54 @@ app.post('/api/verify', async (req, res) => {
     }
 });
 
+app.get('/api/profile/me', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT u.username, u.email, u.full_name, u.institute, u.study_level, u.phone_no, u.short_bio,
+                   m.date_of_birth, m.profile_pic_url
+            FROM users u
+            JOIN user_metadata m ON u.user_id = m.user_id
+            WHERE u.user_id = $1
+        `, [req.user.userId]);
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch profile" });
+    }
+});
+
+app.post('/api/profile/update', authenticateToken, async (req, res) => {
+    const { full_name, phone_no, short_bio, institute, study_level, dob } = req.body;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query(
+            "UPDATE users SET full_name=$1, phone_no=$2, short_bio=$3, institute=$4, study_level=$5 WHERE user_id=$6",
+            [full_name, phone_no, short_bio, institute, study_level, req.user.userId]
+        );
+        await client.query(
+            "UPDATE user_metadata SET date_of_birth=$1 WHERE user_id=$2",
+            [dob || null, req.user.userId]
+        );
+        await client.query('COMMIT');
+        res.json({ message: "Profile updated" });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ error: "Update failed" });
+    } finally { client.release(); }
+});
+
+app.post('/api/profile/upload-photo', authenticateToken, uploadProfile.single('photo'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    try {
+        const url = `/uploads/${req.file.filename}`;
+        await pool.query("UPDATE user_metadata SET profile_pic_url = $1 WHERE user_id = $2", [url, req.user.userId]);
+        res.json({ url });
+    } catch (err) {
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
 app.post('/api/complete-profile', authenticateToken, async (req, res) => {
     const { studyLevel, institute, bio, phone } = req.body;
     
@@ -704,10 +889,29 @@ app.post('/api/complete-profile', authenticateToken, async (req, res) => {
             [studyLevel, institute, bio, phone, userId]
         );
 
-        res.json({ message: "Profile Updated", redirect: "dashboard" });
+        res.json({ message: "Profile Updated", redirect: "/" });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Update Failed" });
+    }
+});
+
+app.post('/api/profile/change-password', authenticateToken, async (req, res) => {
+    const { oldPass, newPass } = req.body;
+    try {
+        const u = await pool.query("SELECT password_hash FROM users WHERE user_id = $1", [req.user.userId]);
+        if (!u.rows[0].password_hash) return res.status(400).json({ error: "You use Google Login (no password set)." });
+
+        const valid = await bcrypt.compare(oldPass, u.rows[0].password_hash);
+        if (!valid) return res.status(403).json({ error: "Incorrect old password" });
+
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(newPass, salt);
+        await pool.query("UPDATE users SET password_hash = $1 WHERE user_id = $2", [hash, req.user.userId]);
+        
+        res.json({ message: "Password changed successfully" });
+    } catch (err) {
+        res.status(500).json({ error: "Server error" });
     }
 });
 

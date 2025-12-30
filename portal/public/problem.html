@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Problem Detail</title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/global.css">
+    <script src="js/header.js"></script>
+    
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+    
+    :root {
+            --grid-color: rgba(131, 131, 134, 0.08);
+            --bg-default: #14141a;
+        }
+
+        body {
+            background-color: var(--bg-default) !important;
+            background-image: 
+                linear-gradient(rgba(131, 131, 134, 0) 29px, var(--grid-color) 29px, var(--grid-color) 30px),
+                linear-gradient(90deg, rgba(131, 131, 134, 0) 29px, var(--grid-color) 29px, var(--grid-color) 30px) !important;
+            background-size: 30px 30px;
+            background-attachment: fixed;
+            color: white;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .problem-container { max-width: 900px; margin: 0 auto; padding-top: 20px; }
+
+        .detail-card { 
+            background: rgba(20, 20, 35, 0.95); 
+            backdrop-filter: blur(10px);
+            padding: 40px; 
+            border-radius: 15px; 
+            border: 1px solid var(--purple-main);
+            box-shadow: 0 0 20px rgba(120, 111, 239, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .problem-img { max-width: 100%; border-radius: 8px; margin: 20px 0; border: 1px solid rgba(255,255,255,0.1); }
+        
+        h1 { font-size: 2rem; margin-bottom: 10px; color: white; margin-top: 0; }
+        
+        .prob-meta { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            margin-bottom: 25px; 
+            border-bottom: 1px solid rgba(255,255,255,0.1); 
+            padding-bottom: 15px; 
+        }
+        
+        .prob-tag { 
+            font-size: 0.8rem; background: rgba(120, 111, 239, 0.2); color: var(--purple-main); 
+            padding: 5px 12px; border-radius: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+            border: 1px solid rgba(120, 111, 239, 0.3);
+        }
+
+        .author-text { color: #aaa; font-size: 0.95rem; }
+        .author-name { color: white; font-weight: 600; }
+
+        .desc-text { font-size: 1.15rem; line-height: 1.8; color: #eee; margin-bottom: 30px; }
+
+        .stat-bar { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; }
+        .solve-stat { color: #ccc; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
+
+        .vote-box { display: flex; gap: 10px; }
+        .vote-btn { 
+            cursor: pointer; padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); 
+            background: rgba(255,255,255,0.05); color: white; transition: 0.2s; font-weight: 500;
+        }
+        .vote-btn:hover { background: rgba(255,255,255,0.15); }
+        .vote-btn.active { background: var(--purple-main); border-color: var(--purple-main); box-shadow: 0 0 10px rgba(120, 111, 239, 0.4); }
+
+       .comment-item { 
+            display: flex; gap: 15px; margin-bottom: 15px; 
+            background: rgba(0, 0, 0, 0.2); padding: 15px; border-radius: 10px; 
+            border: 1px solid rgba(255,255,255,0.05); 
+        }
+        .user-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--purple-main); flex-shrink: 0; }
+        .comment-meta { font-size: 0.85rem; color: #888; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .comment-user { color: var(--purple-main); font-weight: 600; margin-right: 10px; }
+        .comment-text { color: #ddd; line-height: 1.5; font-size: 0.95rem; }
+
+        .back-btn {
+            background: transparent; 
+            border: none;
+            color: #aaa; 
+            padding: 0; 
+            cursor: pointer;
+            margin-bottom: 20px; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 5px;
+            font-size: 0.95rem; 
+            transition: 0.2s;
+        }
+        .back-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+    </style>
+</head>
+<body>
+    <div class="problem-container">
+        <button onclick="window.location.href='/problems'" class="back-btn">← Back to Problems</button>
+        
+        <div id="loading" style="text-align:center; margin-top:50px; color:#aaa;">Loading Problem...</div>
+        
+        <div id="content" class="detail-card" style="display:none;"></div>
+
+        <div class="detail-card">
+            <h3 style="margin-bottom:20px; color:white;">Discussion</h3>
+            <div id="commentsList"></div>
+            
+            <div style="display:flex; gap:10px; margin-top:25px; border-top:1px solid rgba(255,255,255,0.1); padding-top:20px;">
+                <input type="text" id="newComment" placeholder="Ask a question or discuss solution..." style="flex:1; margin-bottom:0;">
+                <button class="btn-primary" onclick="postComment()" style="width:auto; padding:0 25px;">Post</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('authToken');
+        if(!token) window.location.href = '/join';
+
+        const problemId = window.location.pathname.split('/').pop();
+        let currentProblem = null;
+
+        window.onload = () => { loadProblem(); };
+
+        async function loadProblem() {
+            try {
+                const res = await fetch(`/api/problems/${problemId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if(!res.ok) throw new Error("Problem not found");
+                
+                const p = await res.json();
+                currentProblem = p;
+                
+                const ratio = p.unique_attempts > 0 ? ((p.solve_count / p.unique_attempts) * 100).toFixed(1) + '%' : '0%';
+                const figureHTML = p.figure_url ? `<img src="${p.figure_url}" class="problem-img">` : '';
+
+                document.getElementById('content').innerHTML = `
+                    <div class="prob-meta">
+                        <span class="prob-tag">${p.category}</span>
+                        ${p.subcategory ? `<span class="prob-tag" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:#555;">${p.subcategory}</span>` : ''}
+                        <span class="author-text" style="margin-left:auto;">By <span class="author-name">${p.author_name}</span></span>
+                    </div>
+
+                    <h1>${p.title}</h1>
+                    <div class="desc-text">${p.description}</div>
+                    ${figureHTML}
+                    
+                    <div class="stat-bar">
+                        <div class="solve-stat">
+                            <span style="font-size:1.2rem;">🧩</span> 
+                            <span><b>${p.solve_count}</b> Solved (${ratio})</span>
+                        </div>
+
+                        <div class="vote-box">
+                            <button class="vote-btn ${p.userStatus.isLiked ? 'active' : ''}" onclick="vote('like')">
+                                ▲ ${p.upvote_count}
+                            </button>
+                            <button class="vote-btn ${p.userStatus.isDisliked ? 'active' : ''}" onclick="vote('dislike')">
+                                ▼ ${p.downvote_count}
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr style="border-color:rgba(255,255,255,0.1); margin:30px 0;">
+                    
+                    <h3 style="margin-bottom:15px;">Submit Answer</h3>
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="userAns" placeholder="Enter numerical or text answer" style="margin-bottom:0;">
+                        <button class="btn-primary" onclick="submitAnswer()" style="width:auto;">Check</button>
+                    </div>
+                `;
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+
+                if(window.MathJax && MathJax.typesetPromise) {
+                    MathJax.typesetPromise();
+                }
+
+                loadComments();
+
+            } catch(e) { 
+                document.getElementById('loading').innerHTML = "Error loading problem."; 
+                console.error(e);
+            }
+        }
+        
+        async function loadComments() {
+            const list = document.getElementById('commentsList');
+            const res = await fetch(`/api/problems/${problemId}/comments`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const comments = await res.json();
+
+            if(comments.length === 0) {
+                list.innerHTML = `<p style="color:#888; font-style:italic; text-align:center; padding:20px;">No comments yet. Be the first!</p>`;
+                return;
+            }
+
+            list.innerHTML = comments.map(c => {
+                const date = new Date(c.created_at).toLocaleString();
+                const avatar = c.profile_pic_url || "https://via.placeholder.com/40?text=?";
+                
+                return `
+                <div class="comment-item">
+                    <img src="${avatar}" class="user-avatar" onerror="this.src='https://via.placeholder.com/40?text=?'">
+                    <div class="comment-content" style="flex:1;">
+                        <div class="comment-meta">
+                            <span class="comment-user">${escapeHtml(c.username)}</span>
+                            <span>${date}</span>
+                        </div>
+                        <div class="comment-text">${escapeHtml(c.content)}</div>
+                    </div>
+                </div>`;
+            }).join('');
+            
+            if(window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise();
+        }
+
+        async function postComment() {
+            const input = document.getElementById('newComment');
+            if(!input.value.trim()) return;
+            
+            await fetch(`/api/problems/${problemId}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ content: input.value })
+            });
+            input.value = "";
+            loadComments();
+        }
+
+        async function submitAnswer() {
+            const ans = document.getElementById('userAns').value;
+            const res = await fetch(`/api/problems/${problemId}/check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ userAnswer: ans })
+            });
+            const data = await res.json();
+            alert(data.message);
+            if(data.correct) loadProblem();
+        }
+
+        async function vote(type) {
+            await fetch(`/api/problems/${problemId}/vote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ type })
+            });
+            loadProblem();
+        }
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>

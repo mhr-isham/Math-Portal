@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Profile</title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/global.css">
+    <script src="js/header.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h2>Edit Profile</h2>
+        
+        <div class="upload-box">
+            <div style="display:flex; align-items:center; gap:20px; margin-bottom:20px;">
+                <img id="profilePreview" src="https://via.placeholder.com/100" style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:2px solid var(--purple-main);">
+                <div>
+                    <input type="file" id="photoInput" accept="image/*" style="display:none;" onchange="uploadPhoto()">
+                    <button class="btn-primary" onclick="document.getElementById('photoInput').click()">Change Photo</button>
+                    <p style="font-size:0.8rem; color:#aaa; margin-top:5px;">Max 1MB</p>
+                </div>
+            </div>
+
+            <form onsubmit="updateProfile(event)">
+                <label>Full Name</label>
+                <input type="text" id="pName" required>
+                
+                <label>Institute</label>
+                <input type="text" id="pInst">
+                
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                        <label>Phone No</label>
+                        <input type="text" id="pPhone">
+                    </div>
+                    <div style="flex:1;">
+                        <label>Date of Birth</label>
+                        <input type="date" id="pDob">
+                    </div>
+                </div>
+
+                <label>Study Level</label>
+                <select id="pLevel">
+                    <option value="Preschool">Preschool</option>
+                    <option value="1">Class 1</option>
+                    <option value="2">Class 2</option>
+                    <option value="3">Class 3</option>
+                    <option value="4">Class 4</option>
+                    <option value="5">Class 5</option>
+                    <option value="6">Class 6</option>
+                    <option value="7">Class 7</option>
+                    <option value="8">Class 8</option>
+                    <option value="9">Class 9</option>
+                    <option value="10">Class 10</option>
+                    <option value="11">Class 11</option>
+                    <option value="12">Class 12</option>
+                    <option value="bachelors">Bachelors</option>
+                    <option value="masters">Masters</option>
+                    <option value="open">Open Category</option>
+                </select>
+
+                <label>Bio</label>
+                <textarea id="pBio" rows="3"></textarea>
+
+                <button type="submit" class="btn-primary">Save Changes</button>
+            </form>
+        </div>
+
+        <div class="upload-box" style="margin-top:30px; border-color: #d32f2f;">
+            <h3>Change Password</h3>
+            <form onsubmit="changePass(event)">
+                <input type="password" id="oldPass" placeholder="Current Password" required>
+                <input type="password" id="newPass" placeholder="New Password" required>
+                <input type="password" id="confirmPass" placeholder="Confirm New Password" required>
+                <button type="submit" class="delete-btn" style="width:100%; padding:10px;">Update Password</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('authToken');
+        if(!token) window.location.href = '/join';
+
+        window.onload = async () => {
+            const res = await fetch('/api/profile/me', { headers: { 'Authorization': `Bearer ${token}` } });
+            const u = await res.json();
+            
+            document.getElementById('pName').value = u.full_name || "";
+            document.getElementById('pInst').value = u.institute || "";
+            document.getElementById('pPhone').value = u.phone_no || "";
+            document.getElementById('pBio').value = u.short_bio || "";
+            if(u.study_level) document.getElementById('pLevel').value = u.study_level;
+            if(u.date_of_birth) document.getElementById('pDob').value = u.date_of_birth.split('T')[0];
+            if(u.profile_pic_url) document.getElementById('profilePreview').src = u.profile_pic_url;
+        };
+
+        async function uploadPhoto() {
+            const file = document.getElementById('photoInput').files[0];
+            if(!file) return;
+            
+            const formData = new FormData();
+            formData.append('photo', file);
+
+            const res = await fetch('/api/profile/upload-photo', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            if(res.ok) {
+                const data = await res.json();
+                document.getElementById('profilePreview').src = data.url;
+            } else {
+                alert("Upload failed (Max 1MB)");
+            }
+        }
+
+        async function updateProfile(e) {
+            e.preventDefault();
+            const body = {
+                full_name: document.getElementById('pName').value,
+                institute: document.getElementById('pInst').value,
+                phone_no: document.getElementById('pPhone').value,
+                study_level: document.getElementById('pLevel').value,
+                short_bio: document.getElementById('pBio').value,
+                dob: document.getElementById('pDob').value
+            };
+            
+            const res = await fetch('/api/profile/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(body)
+            });
+            if(res.ok) alert("Profile Saved!");
+        }
+
+        async function changePass(e) {
+            e.preventDefault();
+            const p1 = document.getElementById('newPass').value;
+            const p2 = document.getElementById('confirmPass').value;
+            if(p1 !== p2) return alert("Passwords do not match");
+
+            const res = await fetch('/api/profile/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ 
+                    oldPass: document.getElementById('oldPass').value,
+                    newPass: p1 
+                })
+            });
+            const data = await res.json();
+            alert(data.message || data.error);
+        }
+    </script>
+</body>
+</html>

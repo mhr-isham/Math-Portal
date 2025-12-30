@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Problems - NDMC</title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/global.css">
+    <script src="js/header.js"></script>
+    <script> window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } }; </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        #problemList {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .problem-card {
+            background: rgba(30, 30, 45, 0.6);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .problem-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--purple-main);
+            background: rgba(30, 30, 45, 0.9);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .prob-title { font-size: 1.1rem; font-weight: 700; color: white; line-height: 1.4; }
+        .prob-tag { 
+            font-size: 0.75rem; background: rgba(120, 111, 239, 0.15); color: var(--purple-main); 
+            padding: 4px 8px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        .card-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            color: #aaa;
+            font-size: 0.85rem;
+        }
+        
+        .stat-item { display: flex; align-items: center; gap: 5px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h2 style="margin-bottom: 20px; font-size: 2rem;">Problem Archive</h2>
+        
+        <div class="filter-bar">
+            <select id="catFilter" class="filter-select" onchange="updateSubcats()">
+                <option value="All">All Categories</option>
+                <option value="Number Theory">Number Theory</option>
+                <option value="Combinatorics">Combinatorics</option>
+                <option value="Geometry">Geometry</option>
+                <option value="Algebra">Algebra</option>
+            </select>
+            
+            <select id="subFilter" class="filter-select" onchange="loadProblems()" style="flex:1;">
+                <option value="">All Subcategories</option>
+            </select>
+
+            <select id="sortFilter" class="filter-select" onchange="loadProblems()">
+                <option value="newest">Newest First</option>
+                <option value="vote_desc">Highest Rated</option>
+                <option value="vote_asc">Lowest Rated</option>
+                <option value="ratio_desc">Most Solve Ratio</option>
+                <option value="ratio_asc">Least Solve Ratio</option>
+            </select>
+        </div>
+
+        <div id="problemList"><p style="text-align:center; margin-top:50px;">Loading...</p></div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('authToken');
+        const subCats = {
+            'Algebra': ['Function', 'Polynomial', 'Inequality'],
+            'Combinatorics': ['Counting', 'Probability', 'Graph Theory'],
+            'Number Theory': [], 'Geometry': [], 'Others': ['Physics', 'Astronomy']
+        };
+
+        if(!token) {
+            document.body.innerHTML = "<div class='dashboard-container'><h2 style='text-align:center; margin-top:100px;'>Please <a href='/join' style='color:var(--purple-main);'>Login</a> to view problems.</h2></div>";
+        }
+
+        function updateSubcats() {
+            const cat = document.getElementById('catFilter').value;
+            const subSelect = document.getElementById('subFilter');
+            subSelect.innerHTML = '<option value="">All Subcategories</option>';
+
+            if (cat !== 'All' && subCats[cat]) {
+                subCats[cat].forEach(opt => {
+                    const el = document.createElement('option');
+                    el.value = opt; el.innerText = opt;
+                    subSelect.appendChild(el);
+                });
+            }
+            loadProblems();
+        }
+
+        async function loadProblems() {
+            if(!token) return;
+            const cat = document.getElementById('catFilter').value;
+            const sub = document.getElementById('subFilter').value;
+            const sort = document.getElementById('sortFilter').value;
+
+            const url = `/api/problems?category=${encodeURIComponent(cat)}&subcategory=${encodeURIComponent(sub)}&sort=${sort}`;
+            
+            try {
+                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await res.json();
+                
+                if(data.length === 0) {
+                    document.getElementById('problemList').innerHTML = "<p style='text-align:center; color:#666; grid-column: 1/-1;'>No problems found matching criteria.</p>";
+                    return;
+                }
+
+                document.getElementById('problemList').innerHTML = data.map(p => {
+                    const ratio = p.unique_attempts > 0 ? ((p.solve_count / p.unique_attempts) * 100).toFixed(0) + '%' : '0%';
+                    const netVotes = p.upvote_count - p.downvote_count;
+                    
+                    return `
+                    <div class="problem-card" onclick="window.location.href='/problems/${p.problem_id}'">
+                        <div>
+                            <div class="card-header">
+                                <span class="prob-tag">${p.category}</span>
+                                ${p.subcategory ? `<span style="font-size:0.7rem; color:#888;">${p.subcategory}</span>` : ''}
+                            </div>
+                            <div class="prob-title">${p.title}</div>
+                            <div style="font-size:0.85rem; color:#888; margin-top:5px;">By ${p.author_name}</div>
+                        </div>
+                        
+                        <div class="card-stats">
+                            <div class="stat-item"><span>🧩</span> ${ratio} Solved</div>
+                            <div class="stat-item" style="color:${netVotes >= 0 ? 'var(--green-main)' : 'var(--red-main)'}">
+                                ${netVotes > 0 ? '▲' : '▼'} ${netVotes}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+                
+                if(window.MathJax) MathJax.typesetPromise();
+            } catch(e) { console.error(e); }
+        }
+        
+        if(token) loadProblems();
+    </script>
+</body>
+</html>
