@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     const headerHTML = `
     <header class="header">
-        <h2>NDMC Portal</h2>
+        <h2>Math Portal</h2>
         <nav class="nav-links">
             <a href="/" class="nav-item ${path === '/' ? 'active' : ''}">Home</a>
             <a href="/problems" class="nav-item ${path.includes('/problems') ? 'active' : ''}">Problems</a>
