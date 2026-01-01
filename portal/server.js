@@ -337,11 +337,16 @@ app.get('/api/problems/:id', authenticateToken, async (req, res) => {
         const statsRes = await pool.query("SELECT liked_posts, disliked_posts FROM user_stats WHERE user_id = $1", [req.user.userId]);
         const stats = statsRes.rows[0];
 
+        const prevRes = await pool.query("SELECT problem_id FROM problems WHERE problem_id < $1 ORDER BY problem_id DESC LIMIT 1", [id]);
+        const nextRes = await pool.query("SELECT problem_id FROM problems WHERE problem_id > $1 ORDER BY problem_id ASC LIMIT 1", [id]);
+
         delete problem.answer;
         const isLiked = stats.liked_posts.includes(problem.problem_id);
         const isDisliked = stats.disliked_posts.includes(problem.problem_id);
 
-        res.json({ ...problem, userStatus: { isLiked, isDisliked } });
+        res.json({ ...problem, userStatus: { isLiked, isDisliked },
+            prevId: prevRes.rows.length > 0 ? prevRes.rows[0].problem_id : null,
+            nextId: nextRes.rows.length > 0 ? nextRes.rows[0].problem_id : null });
 
     } catch (err) {
         res.status(500).json({ error: "Error details" });

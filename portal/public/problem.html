@@ -32,7 +32,7 @@
             color: white;
             font-family: 'Inter', sans-serif;
         }
-        
+
         .problem-container { max-width: 900px; margin: 0 auto; padding-top: 20px; }
 
         .detail-card { 
@@ -89,6 +89,12 @@
         .comment-meta { font-size: 0.85rem; color: #888; margin-bottom: 5px; display: flex; justify-content: space-between; }
         .comment-user { color: var(--purple-main); font-weight: 600; margin-right: 10px; }
         .comment-text { color: #ddd; line-height: 1.5; font-size: 0.95rem; }
+        .nav-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
 
         .back-btn {
             background: transparent; 
@@ -104,11 +110,34 @@
             transition: 0.2s;
         }
         .back-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+        .nav-buttons { display: flex; gap: 10px; }
+        
+        .nav-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: none;
+        }
+        .nav-btn:hover {
+            background: var(--purple-main);
+            border-color: var(--purple-main);
     </style>
 </head>
 <body>
     <div class="problem-container">
-        <button onclick="window.location.href='/problems'" class="back-btn">← Back to Problems</button>
+        <div class="nav-header">
+            <button onclick="window.location.href='/problems'" class="back-btn">← Back to Problems</button>
+            <div class="nav-buttons">
+                <a id="prevBtn" class="nav-btn">← Previous</a>
+                <a id="nextBtn" class="nav-btn">Next →</a>
+            </div>
+        </div>
         
         <div id="loading" style="text-align:center; margin-top:50px; color:#aaa;">Loading Problem...</div>
         
@@ -141,6 +170,17 @@
                 
                 const p = await res.json();
                 currentProblem = p;
+
+                if (p.prevId) {
+                    const prevBtn = document.getElementById('prevBtn');
+                    prevBtn.href = `/problems/${p.prevId}`;
+                    prevBtn.style.display = 'inline-block';
+                }
+                if (p.nextId) {
+                    const nextBtn = document.getElementById('nextBtn');
+                    nextBtn.href = `/problems/${p.nextId}`;
+                    nextBtn.style.display = 'inline-block';
+                }
                 
                 const ratio = p.unique_attempts > 0 ? ((p.solve_count / p.unique_attempts) * 100).toFixed(1) + '%' : '0%';
                 const figureHTML = p.figure_url ? `<img src="${p.figure_url}" class="problem-img">` : '';
