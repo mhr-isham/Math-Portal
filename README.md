@@ -158,6 +158,7 @@ GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 ### **5. Folder Structure**
 Ensure your project directory is structured as follows:
 
+```bash
 /portal
 │── server.js          # Backend logic
 │── .env               # Environment variables
@@ -174,6 +175,7 @@ Ensure your project directory is structured as follows:
 │   │── js/
 │   │   └── header.js
 │   └── uploads/       # Created automatically
+```bash
 ### **6. Run the Server**
 Start the application:
 
