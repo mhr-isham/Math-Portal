@@ -175,7 +175,8 @@ Ensure your project directory is structured as follows:
 │   │── js/
 │   │   └── header.js
 │   └── uploads/       # Created automatically
-```bash
+```
+
 ### **6. Run the Server**
 Start the application:
 
