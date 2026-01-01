@@ -91,7 +91,7 @@
             <div class="upload-box">
                 <form onsubmit="handleUpload(event)">
                     <input type="text" id="probTitle" placeholder="Problem Title (Required)" required>
-                    
+                    <input type="number" id="probScore" placeholder="Score (Default 10)" style="margin-bottom:15px;">
                     <div style="display:flex; gap:10px;">
                         <select id="probCat" required style="flex:1;" onchange="updateSubcats('probCat', 'probSub')">
                             <option value="" disabled selected>Category</option>
@@ -149,7 +149,7 @@
                 
                 <label style="font-size:0.9rem; color:#aaa; margin-bottom:5px; display:block;">Change Diagram (Optional)</label>
                 <input type="file" id="editFig" accept="image/*" style="padding:10px;">
-                
+                <input type="number" id="editScore" placeholder="Score">
                 <div style="text-align:right;">
                     <button type="button" class="action-btn" style="background:#555;" onclick="closeEdit()">Cancel</button>
                     <button type="submit" class="btn-primary" style="width:auto; padding:8px 20px;">Save</button>
@@ -195,6 +195,7 @@
             formData.append('subcategory', document.getElementById('probSub').value);
             formData.append('description', document.getElementById('probDesc').value);
             formData.append('answer', document.getElementById('probAns').value);
+            formData.append('score', document.getElementById('probScore').value || 10);
 
             const fileInput = document.getElementById('probFig');
             if(fileInput.files[0]) {
@@ -265,7 +266,7 @@
             updateSubcats('editCat', 'editSub');
             document.getElementById('editSub').value = p.subcategory || "";
             document.getElementById('editDesc').value = p.description;
-            
+            document.getElementById('editScore').value = p.initial_score;
             document.getElementById('editFig').value = "";
             document.getElementById('editModal').style.display = 'block';
         }
@@ -281,6 +282,7 @@
             formData.append('category', document.getElementById('editCat').value);
             formData.append('subcategory', document.getElementById('editSub').value);
             formData.append('description', document.getElementById('editDesc').value);
+            formData.append('score', document.getElementById('editScore').value);
             
             const fileInput = document.getElementById('editFig');
             if(fileInput.files[0]) {

@@ -283,12 +283,11 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/problems', authenticateToken, async (req, res) => {
     const { category, subcategory, sort } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = 20;
+    const offset = (page - 1) * limit;
     
-    let query = `
-        SELECT p.*, u.full_name as author_name 
-        FROM problems p
-        JOIN users u ON p.author_id = u.user_id
-    `;
+    let baseQuery = `FROM problems p JOIN users u ON p.author_id = u.user_id`;
     let params = [];
     let conditions = [];
 
@@ -301,19 +300,34 @@ app.get('/api/problems', authenticateToken, async (req, res) => {
         params.push(subcategory);
     }
 
-    if (conditions.length > 0) {
-        query += " WHERE " + conditions.join(" AND ");
-    }
+    if (conditions.length > 0) baseQuery += " WHERE " + conditions.join(" AND ");
 
-    if (sort === 'vote_desc') query += ` ORDER BY (p.upvote_count - p.downvote_count) DESC`;
-    else if (sort === 'vote_asc') query += ` ORDER BY (p.upvote_count - p.downvote_count) ASC`;
-    else if (sort === 'ratio_desc') query += ` ORDER BY (CASE WHEN p.unique_attempts > 0 THEN (p.solve_count::float / p.unique_attempts) ELSE 0 END) DESC`;
-    else if (sort === 'ratio_asc') query += ` ORDER BY (CASE WHEN p.unique_attempts > 0 THEN (p.solve_count::float / p.unique_attempts) ELSE 0 END) ASC`;
-    else query += ` ORDER BY p.created_at DESC`;
+    const countQuery = `SELECT COUNT(*) ${baseQuery}`;
+    const countRes = await pool.query(countQuery, params);
+    const totalItems = parseInt(countRes.rows[0].count);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    let dataQuery = `SELECT p.*, u.full_name as author_name ${baseQuery}`;
+    if (sort === 'vote_desc') dataQuery += ` ORDER BY (p.upvote_count - p.downvote_count) DESC`;
+    else if (sort === 'vote_asc') dataQuery += ` ORDER BY (p.upvote_count - p.downvote_count) ASC`;
+    else if (sort === 'ratio_desc') dataQuery += ` ORDER BY (CASE WHEN p.unique_attempts > 0 THEN (p.solve_count::float / p.unique_attempts) ELSE 0 END) DESC`;
+    else if (sort === 'ratio_asc') dataQuery += ` ORDER BY (CASE WHEN p.unique_attempts > 0 THEN (p.solve_count::float / p.unique_attempts) ELSE 0 END) ASC`;
+    else dataQuery += ` ORDER BY p.created_at DESC`;
+
+    dataQuery += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
 
     try {
-        const result = await pool.query(query, params);
-        res.json(result.rows);
+        const result = await pool.query(dataQuery, params);
+        const statsRes = await pool.query("SELECT solved_problems FROM user_stats WHERE user_id = $1", [req.user.userId]);
+        const solvedIds = statsRes.rows[0]?.solved_problems || [];
+
+        const problems = result.rows.map(p => ({
+            ...p,
+            is_solved: solvedIds.includes(p.problem_id)
+        }));
+
+        res.json({ problems, totalPages, currentPage: page });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch problems" });
@@ -363,6 +377,8 @@ app.post('/api/problems/upload', authenticateToken, uploadProblem.single('figure
     
     if (!title) return res.status(400).json({ error: "Title is required" });
 
+    const initScore = score ? parseInt(score) : 10;
+
     let figureUrl = null;
     if (req.file) {
         figureUrl = `/uploads/questions/figures/${req.file.filename}`;
@@ -370,9 +386,9 @@ app.post('/api/problems/upload', authenticateToken, uploadProblem.single('figure
 
     try {
         await pool.query(
-            `INSERT INTO problems (author_id, title, description, answer, category, subcategory, figure_url) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [req.user.userId, title, description, answer, category, subcategory, figureUrl]
+            `INSERT INTO problems (author_id, title, description, answer, category, subcategory, figure_url, initial_score, dynamic_score) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+            [req.user.userId, title, description, answer, category, subcategory, figureUrl, initScore]
         );
         res.json({ message: "Problem uploaded successfully!" });
     } catch (err) {
@@ -393,63 +409,77 @@ app.post('/api/problems/:id/check', authenticateToken, async (req, res) => {
     try {
         await client.query('BEGIN');
 
-
-        const userStatsRes = await client.query(
-            "SELECT solved_problems, attempted_problems FROM user_stats WHERE user_id = $1", 
-            [userId]
-        );
-        const problemRes = await client.query("SELECT answer FROM problems WHERE problem_id = $1", [problemId]);
-
+        const problemRes = await client.query("SELECT answer, initial_score, dynamic_score FROM problems WHERE problem_id = $1", [problemId]);
         if (problemRes.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ error: "Problem not found" });
         }
-
+        
+        const { answer: correctAnswer, initial_score, dynamic_score } = problemRes.rows[0];
+        
+        const userStatsRes = await client.query("SELECT solved_problems, attempted_problems FROM user_stats WHERE user_id = $1", [userId]);
         const solvedArr = userStatsRes.rows[0].solved_problems || [];
         const attemptedArr = userStatsRes.rows[0].attempted_problems || [];
-        const correctAnswer = problemRes.rows[0].answer;
 
-        await client.query(
-            "UPDATE problems SET total_attempts = total_attempts + 1 WHERE problem_id = $1", 
-            [problemId]
-        );
+        const attemptRes = await client.query("SELECT count FROM attempt_counts WHERE user_id = $1 AND problem_id = $2", [userId, problemId]);
+        let attemptCount = attemptRes.rows.length > 0 ? attemptRes.rows[0].count : 0;
 
-        if (!attemptedArr.includes(problemId)) {
+        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+
+        if (!isCorrect) {
             await client.query(
-                "UPDATE problems SET unique_attempts = unique_attempts + 1 WHERE problem_id = $1", 
-                [problemId]
+                `INSERT INTO attempt_counts (user_id, problem_id, count) VALUES ($1, $2, 1) 
+                 ON CONFLICT (user_id, problem_id) DO UPDATE SET count = attempt_counts.count + 1`,
+                [userId, problemId]
             );
-            await client.query(
-                "UPDATE user_stats SET attempted_problems = array_append(attempted_problems, $1) WHERE user_id = $2",
-                [problemId, userId]
-            );
-        }
-
-        if (userAnswer.trim().toLowerCase() !== correctAnswer.trim().toLowerCase()) {
+            await client.query("UPDATE problems SET total_attempts = total_attempts + 1 WHERE problem_id = $1", [problemId]);
+            if (!attemptedArr.includes(problemId)) {
+                await client.query("UPDATE problems SET unique_attempts = unique_attempts + 1 WHERE problem_id = $1", [problemId]);
+                await client.query("UPDATE user_stats SET attempted_problems = array_append(attempted_problems, $1) WHERE user_id = $2", [problemId, userId]);
+            }
+            
             await client.query('COMMIT'); 
             return res.json({ correct: false, message: "Incorrect, try again." });
         }
-        
+
         if (solvedArr.includes(problemId)) {
             await client.query('COMMIT'); 
             return res.json({ correct: true, message: "Correct! (You already solved this)" });
         }
+        const baseline = initial_score * 0.5;
+        
+
+        let userPoints = dynamic_score * Math.pow(0.9, attemptCount);
+        if (userPoints < baseline) userPoints = baseline;
+        
+        let newDynamicScore = dynamic_score * 0.99;
+        if (newDynamicScore < baseline) newDynamicScore = baseline;
 
         await client.query(
             `UPDATE user_stats 
              SET solved_problems = array_append(solved_problems, $1),
-                 last_submission_time = NOW()
+                 last_submission_time = NOW(),
+                 current_rating = current_rating + $3
              WHERE user_id = $2`,
-            [problemId, userId]
+            [problemId, userId, userPoints]
         );
 
         await client.query(
-            "UPDATE problems SET solve_count = solve_count + 1 WHERE problem_id = $1", 
-            [problemId]
+            `UPDATE problems 
+             SET solve_count = solve_count + 1, 
+                 total_attempts = total_attempts + 1,
+                 dynamic_score = $2
+             WHERE problem_id = $1`, 
+            [problemId, newDynamicScore]
         );
 
+        if (!attemptedArr.includes(problemId)) {
+             await client.query("UPDATE problems SET unique_attempts = unique_attempts + 1 WHERE problem_id = $1", [problemId]);
+             await client.query("UPDATE user_stats SET attempted_problems = array_append(attempted_problems, $1) WHERE user_id = $2", [problemId, userId]);
+        }
+
         await client.query('COMMIT');
-        res.json({ correct: true, message: "Correct Answer! 🎉" });
+        res.json({ correct: true, message: `Correct Answer! 🎉 You earned ${userPoints.toFixed(2)} points.` });
 
     } catch (err) {
         await client.query('ROLLBACK');
@@ -479,7 +509,7 @@ app.get('/api/my-problems', authenticateToken, async (req, res) => {
 app.put('/api/problems/:id', authenticateToken, uploadProblem.single('figure'), async (req, res) => {
     const { id } = req.params;
     const { title, description, category, subcategory } = req.body;
-    
+
     try {
         const check = await pool.query("SELECT author_id, figure_url FROM problems WHERE problem_id = $1", [id]);
         if (check.rows.length === 0) return res.status(404).json({ error: "Problem not found" });
@@ -489,12 +519,15 @@ app.put('/api/problems/:id', authenticateToken, uploadProblem.single('figure'), 
         if (req.file) {
             figureUrl = `/uploads/questions/figures/${req.file.filename}`;
         }
+        const initScore = score ? parseInt(score) : 10;
 
         await pool.query(
-            `UPDATE problems SET title = $1, description = $2, category = $3, subcategory = $4, figure_url = $5 WHERE problem_id = $6`,
-            [title, description, category, subcategory, figureUrl, id]
-        );
-        res.json({ message: "Problem updated successfully" });
+        `UPDATE problems 
+         SET title = $1, description = $2, category = $3, subcategory = $4, figure_url = $5, initial_score = $6, dynamic_score = $6 
+         WHERE problem_id = $7`,
+        [title, description, category, subcategory, figureUrl, initScore, id]
+    );
+    res.json({ message: "Problem updated successfully" });
     } catch (err) { res.status(500).json({ error: "Update failed" }); }
 });
 
