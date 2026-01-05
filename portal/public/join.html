@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NDMC Portal</title>
-    <link rel="stylesheet" href="css/theme.css">
-    <link rel="stylesheet" href="css/global.css">
+    <title>Math Portal</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
     <style>
         .form-container { width: 100%; max-width: 420px; padding: 30px; margin: 20px; }
         select, option {background-color: #1a1a2e !important;color: white !important;}
@@ -32,8 +32,9 @@
         <div class="tabs" id="authTabs">
             <div class="tab active" onclick="switchTab('login')">Login</div>
             <div class="tab" onclick="switchTab('register')">Register</div>
+        </div>
 
-            <div id="googleRegForm" class="form-section">
+        <div id="googleRegForm" class="form-section">
                 <h2 style="text-align:center; margin-bottom:10px;">Almost There!</h2>
                 <p style="text-align:center; color:#aaa; margin-bottom:20px;">Please choose a username to finish setting up your account.</p>
                 
@@ -42,13 +43,12 @@
                     <input type="hidden" id="g_name">
                     <input type="hidden" id="g_sub"> <input type="text" id="g_username" placeholder="Choose Username" required>
                     <input type="password" id="g_password" placeholder="Create Password (Optional)">
-                    <p style="font-size:0.8rem; color:#aaa; margin-top:-10px; margin-bottom:15px;">* If you set a password, you can login with Email OR Google.</p>
+                    <p style="font-size:0.8rem; color:#aaa; margin-top:-10px; margin-bottom:15px;">* If you set a password, you can login with both Email and Google.</p>
                     
                     <button type="submit" class="btn-primary">Create Account</button>
                     <p id="gRegMsg" class="error-msg"></p>
                 </form>
             </div>
-        </div>
 
         <div id="loginForm" class="form-section active">
             <h2 style="text-align:center; margin-bottom:20px;">Welcome Back</h2>
@@ -71,7 +71,7 @@
             <h2 style="text-align:center; margin-bottom:20px;">Create Account</h2>
 
             
-            <div style="text-align:center; margin-bottom:15px; color:#aaa;">- OR -</div>
+            <div style="text-align:center; margin-bottom:15px; color:#aaa;"></div>
             <form id="regFormTag" onsubmit="handleRegister(event)">
                 <input type="text" id="regName" placeholder="Full Name" required>
                 <input type="text" id="regUser" placeholder="Username" required>

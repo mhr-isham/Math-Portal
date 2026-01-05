@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Profile</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
+    <style>
+        .profile-container { max-width: 600px; margin: 0 auto; padding-top: 100px; }
+
+        .profile-card {
+            background: rgba(30, 30, 45, 0.8);
+            backdrop-filter: blur(12px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            border: 1px solid var(--purple-main);
+            box-shadow: 0 0 30px rgba(120, 111, 239, 0.15);
+        }
+
+        .p-avatar {
+            width: 120px; height: 120px; border-radius: 50%;
+            border: 4px solid var(--purple-main);
+            margin-bottom: 20px;
+            object-fit: cover;
+            background: #1a1a2e;
+        }
+
+        .p-name { font-size: 2rem; font-weight: 700; color: white; margin: 0; }
+        .p-user { color: var(--purple-main); font-size: 1.1rem; margin-bottom: 15px; display: block; }
+        
+        .p-stats {
+            display: flex; justify-content: center; gap: 30px;
+            margin: 25px 0; padding: 20px 0;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .stat-box h3 { margin: 0; font-size: 1.8rem; color: white; }
+        .stat-box span { color: #aaa; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+
+        .p-bio { color: #ddd; line-height: 1.6; margin-bottom: 20px; font-style: italic; }
+        .p-inst { 
+            background: rgba(255,255,255,0.05); 
+            display: inline-block; padding: 5px 15px; 
+            border-radius: 5px; color: #ccc; font-size: 0.9rem;
+        }
+
+        .activity-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .heatmap-container {
+            display: inline-grid;
+            grid-template-rows: repeat(7, 12px);
+            grid-auto-flow: column;
+            gap: 4px;
+            margin-top: 15px;
+            max-width: 100%;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+        .day-box {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.1);
+        }
+        .level-0 { background: rgba(255,255,255,0.1); }
+        .level-1 { background: rgba(120, 111, 239, 0.4); }
+        .level-2 { background: rgba(120, 111, 239, 0.6); }
+        .level-3 { background: rgba(120, 111, 239, 0.8); }
+        .level-4 { background: #786fef; box-shadow: 0 0 5px #786fef; }
+        
+        .heatmap-legend {
+            display: flex; gap: 5px; align-items: center; font-size: 0.8rem; color: #888; margin-top: 10px; justify-content: flex-end;
+        }
+        .social-links { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        .social-btn { 
+            color: #aaa; font-size: 1.2rem; text-decoration: none; transition: 0.2s; 
+            background: rgba(255,255,255,0.05); width: 35px; height: 35px; 
+            display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        }
+        .social-btn:hover { background: var(--purple-main); color: white; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin: 30px 0; }
+        .cat-stat-card {
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);
+            padding: 15px; border-radius: 10px; text-align: center;
+        }
+        .cat-name { font-size: 0.8rem; color: #aaa; text-transform: uppercase; margin-bottom: 5px; }
+        .cat-val { font-size: 1.1rem; font-weight: bold; color: white; }
+        .cat-acc { font-size: 0.8rem; color: var(--green-main); margin-top: 5px; }
+
+        .content-list { text-align: left; margin-top: 30px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px; }
+        .list-item { 
+            padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .list-item:last-child { border-bottom: none; }
+        .item-title { color: #ddd; text-decoration: none; font-weight: 500; transition:0.2s; }
+        .item-title:hover { color: var(--purple-main); }
+        .item-meta { font-size: 0.8rem; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="profile-container">
+        <div id="profileContent" style="display:none;">
+            <div class="profile-card">
+                <img id="uPic" class="p-avatar" src="" onerror="this.src='https://via.placeholder.com/150?text=?'">
+                
+                <h1 id="uName" class="p-name"></h1>
+                <span id="uUser" class="p-user"></span>
+                <div id="uMemberSince" style="font-size:0.85rem; color:#666; margin-bottom:10px;"></div>
+
+                <div id="uSocials" class="social-links"></div>
+
+                <div class="p-stats">
+                    <div class="stat-box">
+                        <h3 id="uRank">-</h3>
+                        <span>Rank</span>
+                    </div>
+                    <div class="stat-box">
+                        <h3 id="uRating">-</h3>
+                        <span>Rating</span>
+                    </div>
+                </div>
+
+                <div id="uBio" class="p-bio"></div>
+                <div id="uInst" class="p-inst"></div>
+
+                <div id="catStats" class="stats-grid"></div>
+
+                <div class="activity-section">
+                    <h3 style="margin:0 0 10px 0; font-size:1.2rem; color:white;">Submission Activity</h3>
+                    <div id="activityGrid" class="heatmap-container"></div>
+                    <div class="heatmap-legend">
+                        <span>Less</span>
+                        <div class="day-box level-0"></div>
+                        <div class="day-box level-2"></div>
+                        <div class="day-box level-4"></div>
+                        <span>More</span>
+                    </div>
+                </div>
+                <div id="authoredSection" class="content-list" style="display:none;">
+                    <h3 style="color:white; font-size:1.1rem;">Authored Problems</h3>
+                    <div id="authoredList"></div>
+                </div>
+
+                <div id="commentSection" class="content-list" style="display:none;">
+                    <h3 style="color:white; font-size:1.1rem;">Recent Comments</h3>
+                    <div id="commentList"></div>
+
+            </div>
+        </div>
+        
+        <div id="loading" style="text-align:center; color:#888;">Loading Profile...</div>
+    </div>
+
+    <script>
+        async function loadActivity(username) {
+            try {
+                const res = await fetch(`/api/users/${username}/activity`);
+                const data = await res.json();
+                
+                const grid = document.getElementById('activityGrid');
+                grid.innerHTML = "";
+
+                const today = new Date();
+                const oneYearAgo = new Date();
+                oneYearAgo.setDate(today.getDate() - 364);
+
+                const formatDate = (d) => d.toISOString().split('T')[0];
+
+                for (let d = new Date(oneYearAgo); d <= today; d.setDate(d.getDate() + 1)) {
+                    const dateStr = formatDate(d);
+                    const count = data[dateStr] || 0;
+                    
+                    const box = document.createElement('div');
+                    box.className = 'day-box';
+                    box.title = `${dateStr}: ${count} submissions`;
+                    
+                    if (count === 0) box.classList.add('level-0');
+                    else if (count <= 2) box.classList.add('level-1');
+                    else if (count <= 5) box.classList.add('level-2');
+                    else if (count <= 9) box.classList.add('level-3');
+                    else box.classList.add('level-4');
+
+                    grid.appendChild(box);
+                }
+            } catch (e) { console.error("Activity load failed", e); }
+        }
+
+        async function loadProfile() {
+            const username = window.location.pathname.split('/').pop();
+            try {
+                const res = await fetch(`/api/users/${username}`);
+                if (!res.ok) throw new Error("User not found");
+                
+                const user = await res.json();
+
+                // Basic Info
+                document.getElementById('uPic').src = user.profile_pic_url || "https://via.placeholder.com/150?text=?";
+                document.getElementById('uName').innerText = user.full_name;
+                document.getElementById('uUser').innerText = '@' + user.username;
+                
+                const date = new Date(user.registration_time).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                document.getElementById('uMemberSince').innerText = `Member since ${date}`;
+
+                const socials = document.getElementById('uSocials');
+                socials.innerHTML = '';
+                if(user.twitter_url) socials.innerHTML += `<a href="${user.twitter_url}" target="_blank" class="social-btn" title="X">X</a>`;
+                if(user.instagram_url) socials.innerHTML += `<a href="${user.instagram_url}" target="_blank" class="social-btn" title="Instagram">Insta</a>`;
+                if(user.facebook_url) socials.innerHTML += `<a href="${user.facebook_url}" target="_blank" class="social-btn" title="Facebook">FB</a>`;
+                if(user.website_url) socials.innerHTML += `<a href="${user.website_url}" target="_blank" class="social-btn" title="Website">🌐</a>`;
+                
+                document.getElementById('uRank').innerText = '#' + user.rank;
+                document.getElementById('uRating').innerText = parseFloat(user.current_rating).toFixed(0);
+                document.getElementById('uBio').innerText = user.short_bio || "No bio available.";
+                
+                const instEl = document.getElementById('uInst');
+                if(user.institute) {
+                    instEl.innerText = `🏫 ${user.institute}`;
+                    instEl.style.display = 'inline-block';
+                } else {
+                    instEl.style.display = 'none';
+                }
+
+                const statsGrid = document.getElementById('catStats');
+                statsGrid.innerHTML = '';
+                if (Object.keys(user.category_stats).length > 0) {
+                    for (const [cat, data] of Object.entries(user.category_stats)) {
+                        const accuracy = ((data.solved / data.attempted) * 100).toFixed(0);
+                        statsGrid.innerHTML += `
+                            <div class="cat-stat-card">
+                                <div class="cat-name">${cat}</div>
+                                <div class="cat-val">${data.solved} / ${data.attempted}</div>
+                                <div class="cat-acc">${accuracy}% Acc</div>
+                            </div>`;
+                    }
+                } else {
+                    statsGrid.innerHTML = '<p style="color:#666; grid-column:1/-1;">No problems attempted yet.</p>';
+                }
+
+                if(user.authored_problems.length > 0) {
+                    document.getElementById('authoredSection').style.display = 'block';
+                    document.getElementById('authoredList').innerHTML = user.authored_problems.map(p => `
+                        <div class="list-item">
+                            <a href="/problems/${p.problem_id}" class="item-title">${p.title}</a>
+                            <span class="item-meta">👍 ${p.upvote_count}</span>
+                        </div>
+                    `).join('');
+                }
+
+                if(user.recent_comments.length > 0) {
+                    document.getElementById('commentSection').style.display = 'block';
+                    document.getElementById('commentList').innerHTML = user.recent_comments.map(c => `
+                        <div class="list-item" style="flex-direction:column; align-items:flex-start;">
+                            <div style="font-size:0.9rem; color:#ddd;">"${c.content}"</div>
+                            <div class="item-meta" style="margin-top:5px;">
+                                on <a href="/problems/${c.problem_id}" style="color:#786fef;">${c.problem_title}</a> • ${new Date(c.created_at).toLocaleDateString()}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('profileContent').style.display = 'block';
+            } catch (err) {
+                console.error(err);
+                document.getElementById('loading').innerHTML = `<h3 style="color:var(--red-main)">User not found</h3>`;
+            }
+            loadActivity(username);
+        }
+        loadProfile();
+    </script>
+</body>
+</html>

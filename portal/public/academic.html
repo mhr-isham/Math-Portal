@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Academic Dashboard - NDMC</title>
-    <link rel="stylesheet" href="css/theme.css">
-    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
     <style>
         html { background-color: #14141a; }
         body { display: none; }
@@ -37,7 +37,7 @@
         })();
     </script>
 
-    <script src="js/header.js"></script>
+    <script src="/js/header.js"></script>
     <script>
       window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } };
     </script>
@@ -75,6 +75,25 @@
         .action-btn { padding: 5px 15px; border-radius: 5px; border: none; cursor: pointer; color: white; font-size: 0.85rem; margin-left: 5px; }
         .edit-btn { background: #2196F3; }
         .delete-btn { background: #d32f2f; }
+
+        .toggle-container { display: flex; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 8px; width: fit-content; margin-bottom: 15px; }
+    .toggle-btn { 
+        padding: 8px 16px; border: none; background: transparent; color: #aaa; cursor: pointer; border-radius: 6px; font-weight: 500; transition: 0.2s; 
+    }
+    .toggle-btn.active { background: var(--purple-main); color: white; }
+
+    .ping-dot {
+        width: 10px; height: 10px; background: var(--red-main); border-radius: 50%; 
+        display: inline-block; margin-left: 5px; box-shadow: 0 0 5px var(--red-main);
+    }
+    
+    .trans-card {
+        background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1);
+    }
+    .status-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
+    .st-pending { background: #ff9800; color: black; }
+    .st-approved { background: var(--green-main); color: black; }
+    .st-rejected { background: var(--red-main); color: white; }
     </style>
 </head>
 <body>
@@ -84,77 +103,126 @@
         
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('upload')">Upload New</button>
-            <button class="tab-btn" onclick="switchTab('manage')">My Questions</button>
+            <button class="tab-btn" onclick="switchTab('edit')">
+                Edit Question <span id="mainPing" style="display:none;" class="ping-dot"></span>
+            </button>
         </div>
 
         <div id="uploadPanel" class="panel active">
             <div class="upload-box">
                 <form onsubmit="handleUpload(event)">
-                    <input type="text" id="probTitle" placeholder="Problem Title (Required)" required>
-                    <input type="number" id="probScore" placeholder="Score (Default 10)" style="margin-bottom:15px;">
-                    <div style="display:flex; gap:10px;">
+                    
+                    <label style="color:#aaa; font-size:0.9rem;">Problem Language</label>
+                    <div class="toggle-container">
+                        <button type="button" class="toggle-btn active" onclick="setUploadLang('en', this)">English</button>
+                        <button type="button" class="toggle-btn" onclick="setUploadLang('bn', this)">Bengali</button>
+                        <button type="button" class="toggle-btn" onclick="setUploadLang('both', this)">Both</button>
+                    </div>
+
+                    <div id="uploadEn" style="display:block;">
+                        <input type="text" id="probTitle" placeholder="Title (English)">
+                        <div class="math-toolbar">
+                            <button type="button" class="math-btn" onclick="insertMath('$...$', 'probDesc')">$ x $</button>
+                            <button type="button" class="math-btn" onclick="insertMath('$$...$$', 'probDesc')">$$ x $$</button>
+                            <button type="button" class="math-btn" onclick="insertMath('\\frac{a}{b}', 'probDesc')">a/b</button>
+                            <button type="button" class="math-btn" onclick="insertMath('\\sqrt{x}', 'probDesc')">√x</button>
+                        </div>
+                        <textarea id="probDesc" rows="4" placeholder="Description (English - LaTeX supported)"></textarea>
+                    </div>
+
+                    <div id="uploadBn" style="display:none; margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:20px;">
+                        <input type="text" id="probTitleBn" placeholder="Title (Bengali)">
+                        <div class="math-toolbar">
+                            <button type="button" class="math-btn" onclick="insertMath('$...$', 'probDesc')">$ x $</button>
+                            <button type="button" class="math-btn" onclick="insertMath('$$...$$', 'probDesc')">$$ x $$</button>
+                            <button type="button" class="math-btn" onclick="insertMath('\\frac{a}{b}', 'probDesc')">a/b</button>
+                            <button type="button" class="math-btn" onclick="insertMath('\\sqrt{x}', 'probDesc')">√x</button>
+                        </div>
+                        <textarea id="probDescBn" rows="4" placeholder="Description (Bengali - LaTeX Code must be in English)"></textarea>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-top:15px;">
                         <select id="probCat" required style="flex:1;" onchange="updateSubcats('probCat', 'probSub')">
                             <option value="" disabled selected>Category</option>
                             <option value="Number Theory">Number Theory</option>
+                            <option value="Algebra">Algebra</option>
                             <option value="Combinatorics">Combinatorics</option>
                             <option value="Geometry">Geometry</option>
-                            <option value="Algebra">Algebra</option>
                             <option value="Others">Others</option>
                         </select>
-                        <select id="probSub" style="flex:1;">
-                            <option value="">Subcategory (Optional)</option>
-                        </select>
+                        <select id="probSub" style="flex:1;"><option value="">Subcategory</option></select>
                     </div>
 
-                    <label style="font-size:0.9rem; color:#aaa; margin-top:10px; display:block;">Problem Statement</label>
-                    <div class="math-toolbar">
-                        <button type="button" class="math-btn" onclick="insertMath('$...$', 'probDesc')">$ x $</button>
-                        <button type="button" class="math-btn" onclick="insertMath('$$...$$', 'probDesc')">$$ x $$</button>
-                        <button type="button" class="math-btn" onclick="insertMath('\\frac{a}{b}', 'probDesc')">a/b</button>
-                        <button type="button" class="math-btn" onclick="insertMath('\\sqrt{x}', 'probDesc')">√x</button>
+                    <input type="file" id="probFig" accept="image/*" style="padding:10px; margin-top:10px;">
+
+                    <label style="color:#aaa; font-size:0.9rem; margin-top:15px; display:block;">Answer Type</label>
+                    <div class="toggle-container">
+                        <button type="button" class="toggle-btn active" onclick="setAnsType('numeric', this)">Numeric</button>
+                        <button type="button" class="toggle-btn" onclick="setAnsType('text', this)">Text</button>
                     </div>
-                    <textarea id="probDesc" rows="6" placeholder="Description (Use LaTeX)" required></textarea>
-                    
-                    <label style="font-size:0.9rem; color:#aaa; margin-bottom:5px; display:block;">Diagram/Figure (Optional, Max 2MB)</label>
-                    <input type="file" id="probFig" accept="image/*" style="padding:10px;">
-                    
+                    <input type="hidden" id="ansType" value="numeric">
+
                     <input type="text" id="probAns" placeholder="Correct Answer" required>
-                    
-                    <button type="submit" class="btn-primary">Upload Problem</button>
-                    <p id="uploadMsg" style="margin-top:10px;"></p>
+                    <input type="number" id="probScore" placeholder="Score (Default: 10)">
+
+                    <div id="numericSettings">
+                        <label style="font-size:0.9rem; color:#aaa; margin-bottom:5px; display:block;">Flexible Answer Settings</label>
+                        <div style="display:flex; gap:10px;">
+                            <input type="number" step="any" id="probMargin" placeholder="± Margin">
+                            <input type="number" step="any" id="probRangeStart" placeholder="Min">
+                            <input type="number" step="any" id="probRangeEnd" placeholder="Max">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="margin-top:20px;">Upload Problem</button>
+                    <p id="uploadMsg"></p>
                 </form>
             </div>
         </div>
 
-        <div id="managePanel" class="panel">
-            <div id="myQuestionsList"><p>Loading...</p></div>
-        </div>
+        <div id="editPanel" class="panel">
+            <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+                <button class="tab-btn active" onclick="switchSubTab('myQuestions')">My Questions</button>
+                <button class="tab-btn" onclick="switchSubTab('translate')">Translate Question</button>
+                <button class="tab-btn" onclick="switchSubTab('approvals')">
+                    Pending Approval <span id="approvePing" style="display:none;" class="ping-dot"></span>
+                </button>
+                <button class="tab-btn" onclick="switchSubTab('requests')">My Requests</button>
+            </div>
 
-        <div id="editModal" class="upload-box" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:600px; z-index:2000; background:#1a1a2e; box-shadow:0 0 50px rgba(0,0,0,0.8);">
-            <h3>Edit Problem</h3>
-            <form onsubmit="handleEdit(event)">
-                <input type="hidden" id="editId">
-                <input type="text" id="editTitle" required>
-                <div style="display:flex; gap:10px;">
-                    <select id="editCat" required style="flex:1;" onchange="updateSubcats('editCat', 'editSub')">
-                        <option value="Number Theory">Number Theory</option>
-                        <option value="Combinatorics">Combinatorics</option>
-                        <option value="Geometry">Geometry</option>
-                        <option value="Algebra">Algebra</option>
-                        <option value="Others">Others</option>
-                    </select>
-                    <select id="editSub" style="flex:1;"></select>
-                </div>
-                <textarea id="editDesc" rows="5" required></textarea>
+            <div id="sub-myQuestions" class="sub-panel" style="display:block;">
+                <div id="myQuestionsList"><p>Loading...</p></div>
+            </div>
+
+            <div id="sub-translate" class="sub-panel" style="display:none;">
+                <input type="text" id="transSearch" placeholder="Search problems to translate..." oninput="searchProblems(this.value)">
+                <div id="searchList" style="margin-top:15px;"></div>
                 
-                <label style="font-size:0.9rem; color:#aaa; margin-bottom:5px; display:block;">Change Diagram (Optional)</label>
-                <input type="file" id="editFig" accept="image/*" style="padding:10px;">
-                <input type="number" id="editScore" placeholder="Score">
-                <div style="text-align:right;">
-                    <button type="button" class="action-btn" style="background:#555;" onclick="closeEdit()">Cancel</button>
-                    <button type="submit" class="btn-primary" style="width:auto; padding:8px 20px;">Save</button>
+                <div id="transForm" class="upload-box" style="display:none; margin-top:20px;">
+                    <h3>Submit Translation</h3>
+                    <input type="hidden" id="transProbId">
+                    <p id="transOriginalTitle" style="color:#aaa; font-style:italic;"></p>
+                    
+                    <select id="transLang" style="margin-bottom:15px;">
+                        <option value="bn">Bengali</option>
+                        <option value="en">English</option>
+                    </select>
+                    
+                    <input type="text" id="transTitle" placeholder="Translated Title">
+                    <textarea id="transDesc" rows="4" placeholder="Translated Description"></textarea>
+                    
+                    <button class="btn-primary" onclick="submitTranslation()">Submit</button>
+                    <button class="action-btn" onclick="document.getElementById('transForm').style.display='none'" style="background:#555;">Cancel</button>
                 </div>
-            </form>
+            </div>
+
+            <div id="sub-approvals" class="sub-panel" style="display:none;">
+                <div id="approvalList"></div>
+            </div>
+
+            <div id="sub-requests" class="sub-panel" style="display:none;">
+                <div id="requestList"></div>
+            </div>
         </div>
     </div>
 
@@ -163,7 +231,7 @@
         const subCats = {
             'Algebra': ['Function', 'Polynomial', 'Inequality'],
             'Combinatorics': ['Counting', 'Probability', 'Graph Theory'],
-            'Number Theory': [], 'Geometry': [], 'Others': ['Physics', 'Astronomy']
+            'Number Theory': [], 'Geometry': [], 'Others': ['Physics', 'Astronomy', 'Calculus']
         };
 
         function switchTab(tab) {
@@ -173,7 +241,21 @@
             document.getElementById(tab+'Panel').classList.add('active');
             event.target.classList.add('active'); 
             
-            if(tab === 'manage') loadMyQuestions();
+            if(tab === 'edit') loadMyQuestions();
+        }
+
+        function switchSubTab(tab) {
+            document.querySelectorAll('.sub-panel').forEach(p => p.style.display = 'none');
+            document.getElementById('sub-' + tab).style.display = 'block';
+            
+            const btn = event.target.closest('button');
+            if(btn) {
+                btn.parentNode.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
+
+            if(tab === 'approvals') loadApprovals();
+            if(tab === 'requests') loadRequests();
         }
 
         function updateSubcats(catId, subId) {
@@ -185,17 +267,52 @@
             });
         }
 
+        let uploadLangMode = 'en';
+
+        function setUploadLang(mode, btn) {
+            uploadLangMode = mode;
+            btn.parentNode.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.getElementById('uploadEn').style.display = (mode === 'en' || mode === 'both') ? 'block' : 'none';
+            document.getElementById('uploadBn').style.display = (mode === 'bn' || mode === 'both') ? 'block' : 'none';
+        }
+
+        function setAnsType(type, btn) {
+            document.getElementById('ansType').value = type;
+            btn.parentNode.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('numericSettings').style.display = type === 'numeric' ? 'block' : 'none';
+        }
+
         async function handleUpload(e) {
             e.preventDefault();
             const msg = document.getElementById('uploadMsg');
             msg.innerText = "Uploading...";
+
             const formData = new FormData();
-            formData.append('title', document.getElementById('probTitle').value);
+
+
             formData.append('category', document.getElementById('probCat').value);
             formData.append('subcategory', document.getElementById('probSub').value);
-            formData.append('description', document.getElementById('probDesc').value);
             formData.append('answer', document.getElementById('probAns').value);
             formData.append('score', document.getElementById('probScore').value || 10);
+            formData.append('answerType', document.getElementById('ansType').value);
+
+            if(document.getElementById('ansType').value === 'numeric') {
+                formData.append('errorMargin', document.getElementById('probMargin').value);
+                formData.append('rangeStart', document.getElementById('probRangeStart').value);
+                formData.append('rangeEnd', document.getElementById('probRangeEnd').value);
+            }
+
+            if(uploadLangMode === 'en' || uploadLangMode === 'both') {
+                formData.append('title', document.getElementById('probTitle').value);
+                formData.append('description', document.getElementById('probDesc').value);
+            }
+            if(uploadLangMode === 'bn' || uploadLangMode === 'both') {
+                formData.append('titleBn', document.getElementById('probTitleBn').value);
+                formData.append('descriptionBn', document.getElementById('probDescBn').value);
+            }
 
             const fileInput = document.getElementById('probFig');
             if(fileInput.files[0]) {
@@ -208,19 +325,12 @@
                     headers: { 'Authorization': `Bearer ${token}` }, 
                     body: formData
                 });
-
-                let data;
-                try {
-                    data = await res.json();
-                } catch (parseErr) {
-                    throw new Error("Server Error: " + res.statusText);
-                }
+                const data = await res.json();
                 
                 if (res.ok) {
                     msg.style.color = "var(--green-main)";
                     msg.innerText = "✅ Uploaded Successfully!";
                     e.target.reset();
-                    document.getElementById('probFig').value = ""; 
                 } else {
                     msg.style.color = "red";
                     msg.innerText = data.error || "Upload Failed";
@@ -228,8 +338,118 @@
             } catch (err) { 
                 console.error(err);
                 msg.style.color = "red";
-                msg.innerText = err.message || "Network Error"; 
+                msg.innerText = "Network Error"; 
             }
+        }
+
+            async function searchProblems(q) {
+                if(q.length < 3) return;
+                const res = await fetch(`/api/problems/search?q=${q}`, { headers: {'Authorization': `Bearer ${token}`} });
+                const data = await res.json();
+                
+                document.getElementById('searchList').innerHTML = data.map(p => `
+                    <div class="list-item">
+                        <span>${p.title || p.title_bn} <small>(${p.category})</small></span>
+                        <button class="action-btn edit-btn" onclick="openTranslate(${p.problem_id}, '${escapeHtml(p.title||p.title_bn)}')">Translate</button>
+                    </div>
+                `).join('');
+            }
+
+        function openTranslate(id, title) {
+            document.getElementById('transForm').style.display = 'block';
+            document.getElementById('transProbId').value = id;
+            document.getElementById('transOriginalTitle').innerText = "Translating: " + title;
+        }
+
+        async function submitTranslation() {
+            const body = {
+                problemId: document.getElementById('transProbId').value,
+                language: document.getElementById('transLang').value,
+                title: document.getElementById('transTitle').value,
+                description: document.getElementById('transDesc').value
+            };
+            await fetch('/api/translations/submit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                body: JSON.stringify(body)
+            });
+            alert("Submitted!");
+            document.getElementById('transForm').style.display = 'none';
+        }
+
+        async function loadApprovals() {
+            const res = await fetch('/api/translations/incoming', { headers: {'Authorization': `Bearer ${token}`} });
+            const list = await res.json();
+            
+            document.getElementById('approvalList').innerHTML = list.length ? list.map(t => `
+                <div class="trans-card">
+                    <div style="display:flex; justify-content:space-between;">
+                        <b>${escapeHtml(t.original_title)}</b>
+                        <span class="status-badge st-${t.status}">${t.status}</span>
+                    </div>
+                    <p>Translator: ${escapeHtml(t.translator_name)} | Lang: ${t.language.toUpperCase()}</p>
+                    <input type="text" value="${escapeHtml(t.title)}" id="appTitle-${t.translation_id}">
+                    <textarea rows="2" id="appDesc-${t.translation_id}">${t.description}</textarea>
+                    <div style="margin-top:10px;">
+                        <button class="action-btn edit-btn" style="background:var(--green-main); color:black;" onclick="decideTrans(${t.translation_id}, 'approve')">Approve & Merge</button>
+                        <button class="action-btn delete-btn" onclick="decideTrans(${t.translation_id}, 'reject')">Reject</button>
+                    </div>
+                </div>
+            `).join('') : '<p>No pending approvals.</p>';
+        }
+
+        async function decideTrans(id, action) {
+            const title = document.getElementById(`appTitle-${id}`).value;
+            const desc = document.getElementById(`appDesc-${id}`).value;
+            
+            await fetch('/api/translations/decide', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                body: JSON.stringify({ translationId: id, action, editedTitle: title, editedDesc: desc })
+            });
+            loadApprovals();
+        }
+
+        async function loadRequests() {
+            try {
+                const res = await fetch('/api/translations/outgoing', { headers: {'Authorization': `Bearer ${token}`} });
+                const list = await res.json();
+
+                if (list.error) {
+                    document.getElementById('requestList').innerHTML = `<p style="color:red;">Server Error: ${list.error}</p>`;
+                    return;
+                }
+                
+                document.getElementById('requestList').innerHTML = list.length ? list.map(t => `
+                    <div class="trans-card">
+                        <div style="display:flex; justify-content:space-between;">
+                            <b>${escapeHtml(t.original_title)}</b>
+                            <span class="status-badge st-${t.status}">${t.status}</span>
+                        </div>
+                        <div style="margin-top:5px;">
+                            <span style="color:#aaa; font-size:0.9rem;">Language: </span> 
+                            <span style="font-weight:bold; color:white;">${t.language.toUpperCase()}</span>
+                        </div>
+                        <div style="margin-top:5px; padding:10px; background:rgba(0,0,0,0.2); border-radius:5px;">
+                            <div style="font-weight:bold; color:#ddd; font-size:0.9rem;">${escapeHtml(t.title)}</div>
+                            <div style="color:#888; font-size:0.85rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                ${escapeHtml(t.description)}
+                            </div>
+                        </div>
+                        <div style="margin-top:8px; font-size:0.8rem; color:#666;">
+                            Submitted: ${new Date(t.created_at).toLocaleDateString()}
+                        </div>
+                    </div>
+                `).join('') : '<p style="text-align:center; color:#888; margin-top:20px;">You haven\'t submitted any translation requests.</p>';
+            } catch (err) {
+                console.error(err);
+                document.getElementById('requestList').innerHTML = '<p style="color:red;">Failed to load requests.</p>';
+            }
+        }
+
+        function escapeHtml(text) { 
+            if(!text) return "";
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
         async function loadMyQuestions() {
@@ -239,7 +459,7 @@
             document.getElementById('myQuestionsList').innerHTML = data.map(p => `
                 <div class="list-item">
                     <div>
-                        <div style="font-weight:bold; font-size:1.1rem;">${p.title}</div>
+                        <div style="font-weight:bold; font-size:1.1rem;">${escapeHtml(p.title || p.title_bn)}</div>
                         <div style="color:#aaa; font-size:0.9rem;">${p.category} • Likes: ${p.upvote_count}</div>
                     </div>
                     <div>
@@ -249,6 +469,18 @@
                 </div>
             `).join('');
         }
+
+        (async function checkPings() {
+            if(!token) return;
+            try {
+                const res = await fetch('/api/translations/incoming', { headers: {'Authorization': `Bearer ${token}`} });
+                const list = await res.json();
+                if(list.length > 0) {
+                    document.getElementById('mainPing').style.display = 'inline-block';
+                    document.getElementById('approvePing').style.display = 'inline-block';
+                }
+            } catch(e) {}
+        })();
 
         async function deleteProblem(id) {
             if(!confirm("Permanently delete this problem?")) return;
@@ -261,12 +493,19 @@
             const p = await res.json();
             
             document.getElementById('editId').value = id;
-            document.getElementById('editTitle').value = p.title;
+            document.getElementById('editTitle').value = p.title || p.title_bn || "";
             document.getElementById('editCat').value = p.category;
             updateSubcats('editCat', 'editSub');
             document.getElementById('editSub').value = p.subcategory || "";
-            document.getElementById('editDesc').value = p.description;
+            document.getElementById('editDesc').value = p.description || p.description_bn || "";
+            
+            document.getElementById('editAns').value = p.answer; 
+
             document.getElementById('editScore').value = p.initial_score;
+            document.getElementById('editMargin').value = p.error_margin || "";
+            document.getElementById('editRangeStart').value = p.range_start || "";
+            document.getElementById('editRangeEnd').value = p.range_end || "";
+
             document.getElementById('editFig').value = "";
             document.getElementById('editModal').style.display = 'block';
         }
@@ -279,15 +518,18 @@
             
             const formData = new FormData();
             formData.append('title', document.getElementById('editTitle').value);
+            formData.append('answer', document.getElementById('editAns').value); 
+            
             formData.append('category', document.getElementById('editCat').value);
             formData.append('subcategory', document.getElementById('editSub').value);
             formData.append('description', document.getElementById('editDesc').value);
             formData.append('score', document.getElementById('editScore').value);
+            formData.append('errorMargin', document.getElementById('editMargin').value);
+            formData.append('rangeStart', document.getElementById('editRangeStart').value);
+            formData.append('rangeEnd', document.getElementById('editRangeEnd').value);
             
             const fileInput = document.getElementById('editFig');
-            if(fileInput.files[0]) {
-                formData.append('figure', fileInput.files[0]);
-            }
+            if(fileInput.files[0]) formData.append('figure', fileInput.files[0]);
 
             await fetch(`/api/problems/${id}`, {
                 method: 'PUT',
@@ -305,5 +547,46 @@
             el.focus();
         }
     </script>
+    <div id="editModal" class="upload-box" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:600px; z-index:1000; box-shadow:0 0 50px rgba(0,0,0,0.8);">
+        <h3 style="margin-top:0;">Edit Problem</h3>
+        <form onsubmit="handleEdit(event)">
+            <input type="hidden" id="editId">
+            <input type="text" id="editTitle" placeholder="Title">
+            
+            <div style="display:flex; gap:10px;">
+                <select id="editCat" onchange="updateSubcats('editCat', 'editSub')" style="flex:1;">
+                    <option value="Number Theory">Number Theory</option>
+                    <option value="Algebra">Algebra</option>
+                    <option value="Combinatorics">Combinatorics</option>
+                    <option value="Geometry">Geometry</option>
+                    <option value="Others">Others</option>
+                </select>
+                <select id="editSub" style="flex:1;"><option value="">Subcategory</option></select>
+            </div>
+    
+            <textarea id="editDesc" rows="5" placeholder="Description"></textarea>
+            
+            <label style="font-size:0.9rem; color:#aaa;">Correct Answer</label>
+            <input type="text" id="editAns" placeholder="Correct Answer" required>
+
+            <label style="font-size:0.9rem; color:#aaa;">Edit Score</label>
+            <input type="number" id="editScore" placeholder="Score">
+    
+            <label style="font-size:0.9rem; color:#aaa; display:block;">Flexible Answer Settings</label>
+            <div style="display:flex; gap:10px;">
+                <input type="number" step="any" id="editMargin" placeholder="± Margin">
+                <input type="number" step="any" id="editRangeStart" placeholder="Min">
+                <input type="number" step="any" id="editRangeEnd" placeholder="Max">
+            </div>
+    
+            <label style="font-size:0.9rem; color:#aaa;">Change Diagram (Optional)</label>
+            <input type="file" id="editFig" accept="image/*">
+    
+            <div style="margin-top:15px; display:flex; gap:10px; justify-content:flex-end;">
+                <button type="button" class="action-btn" style="background:#555;" onclick="closeEdit()">Cancel</button>
+                <button type="submit" class="btn-primary" style="width:auto;">Save Changes</button>
+            </div>
+        </form>
+    </div>
 </body>
 </html>

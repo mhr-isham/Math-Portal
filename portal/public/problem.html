@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Problem Detail</title>
-    <link rel="stylesheet" href="css/theme.css">
-    <link rel="stylesheet" href="css/global.css">
-    <script src="js/header.js"></script>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
     
     <script>
       window.MathJax = {
@@ -33,7 +33,7 @@
             font-family: 'Inter', sans-serif;
         }
 
-        .problem-container { max-width: 900px; margin: 0 auto; padding-top: 20px; }
+        .problem-container { max-width: 900px; margin: 0 auto; padding-top: 85px; }
 
         .detail-card { 
             background: rgba(20, 20, 35, 0.95); 
@@ -97,10 +97,11 @@
         }
 
         .back-btn {
-            background: transparent; 
-            border: none;
-            color: #aaa; 
-            padding: 0; 
+            background: rgba(255,255,255,0.05); 
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white; 
+            padding: 8px 15px; 
+            border-radius: 7px;
             cursor: pointer;
             margin-bottom: 20px; 
             display: inline-flex; 
@@ -171,6 +172,21 @@
                 const p = await res.json();
                 currentProblem = p;
 
+                const hasEn = !!p.title;
+                const hasBn = !!p.title_bn;
+
+                let langToggleHTML = '';
+                if (hasEn && hasBn) {
+                    langToggleHTML = `
+                        <div class="toggle-container" style="margin-bottom:20px;">
+                            <button class="toggle-btn active" onclick="setLang('en')">EN</button>
+                            <button class="toggle-btn" onclick="setLang('bn')">BN</button>
+                        </div>`;
+                } else if (hasBn && !hasEn) {
+                    p.title = p.title_bn;
+                    p.description = p.description_bn;
+                }
+
                 if (p.prevId) {
                     const prevBtn = document.getElementById('prevBtn');
                     prevBtn.href = `/problems/${p.prevId}`;
@@ -184,16 +200,25 @@
                 
                 const ratio = p.unique_attempts > 0 ? ((p.solve_count / p.unique_attempts) * 100).toFixed(1) + '%' : '0%';
                 const figureHTML = p.figure_url ? `<img src="${p.figure_url}" class="problem-img">` : '';
+                const bmBtnText = p.userStatus.isBookmarked ? "Remove Bookmark" : "Bookmark";
+                const bmBtnClass = p.userStatus.isBookmarked ? "active" : "";
 
                 document.getElementById('content').innerHTML = `
                     <div class="prob-meta">
                         <span class="prob-tag">${p.category}</span>
                         ${p.subcategory ? `<span class="prob-tag" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:#555;">${p.subcategory}</span>` : ''}
+                        <button onclick="toggleBookmark()" class="vote-btn ${bmBtnClass}" style="margin-left:10px; padding:4px 10px; font-size:0.8rem;">
+                            🔖 ${bmBtnText}
+                        </button>
                         <span class="author-text" style="margin-left:auto;">By <span class="author-name">${p.author_name}</span></span>
                     </div>
-
-                    <h1>${p.title}</h1>
-                    <div class="desc-text">${p.description}</div>
+                    ${langToggleHTML}
+                    <h1 id="displayTitle">${p.title}</h1>
+                    <div style="margin-bottom:20px; color:var(--purple-main); font-weight:500; font-size:1.1rem;">
+                        Potential Score: ${p.user_potential_score} 
+                        <span style="color:#666; font-size:0.9rem;">(Initial: ${p.initial_score})</span>
+                    </div>
+                    <div id="displayDesc" class="desc-text">${p.description}</div>
                     ${figureHTML}
                     
                     <div class="stat-bar">
@@ -220,7 +245,7 @@
                         <button class="btn-primary" onclick="submitAnswer()" style="width:auto;">Check</button>
                     </div>
                 `;
-                
+
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
 
@@ -230,10 +255,36 @@
 
                 loadComments();
 
+                window.setLang = function(lang) {
+                const btns = document.querySelectorAll('.toggle-btn');
+                btns.forEach(b => b.classList.remove('active'));
+                event.target.classList.add('active');
+
+                const titleEl = document.getElementById('displayTitle');
+                const descEl = document.getElementById('displayDesc');
+
+                if (lang === 'en') {
+                    titleEl.innerText = currentProblem.title;
+                    descEl.innerHTML = currentProblem.description; 
+                } else {
+                    titleEl.innerText = currentProblem.title_bn;
+                    descEl.innerHTML = currentProblem.description_bn;
+                }
+                if(window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise();
+                };
+
             } catch(e) { 
                 document.getElementById('loading').innerHTML = "Error loading problem."; 
                 console.error(e);
             }
+        }
+
+        async function toggleBookmark() {
+            await fetch(`/api/problems/${problemId}/bookmark`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            loadProblem(); // Reload to update UI
         }
         
         async function loadComments() {
@@ -287,8 +338,12 @@
                 body: JSON.stringify({ userAnswer: ans })
             });
             const data = await res.json();
-            alert(data.message);
-            if(data.correct) loadProblem();
+            if (!res.ok) {
+                alert(data.error || "An error occurred");
+            } else {
+                alert(data.message);
+                if(data.correct) loadProblem();
+            }
         }
 
         async function vote(type) {

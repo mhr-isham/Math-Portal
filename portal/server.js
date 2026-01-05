@@ -14,6 +14,11 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const app = express();
 const port = process.env.PORT || 3000;
 const { OAuth2Client } = require('google-auth-library');
+const { rootCertificates } = require('tls');
+const { OutgoingMessage } = require('http');
+const { REPL_MODE_SLOPPY } = require('repl');
+const { nextTick } = require('process');
+const { Stream } = require('nodemailer/lib/xoauth2');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const profileStorage = multer.diskStorage({
@@ -26,7 +31,7 @@ const profileStorage = multer.diskStorage({
         cb(null, req.user.userId + '-' + Date.now() + path.extname(file.originalname));
     }
 });
-const uploadProfile = multer({ storage: profileStorage, limits: { fileSize: 1000000 } });
+const uploadProfile = multer({ storage: profileStorage, limits: { fileSize: 2000000 } });
 
 const problemStorage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -47,16 +52,16 @@ app.use(
           "default-src": ["'self'"],
           "script-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://accounts.google.com", "https://g.notify.usercontent.com"],
           "script-src-attr": ["'self'", "'unsafe-inline'"],
-          "img-src": ["'self'", "data:", "https:"],
+          "img-src": ["'self'", "data:", "https:", "https://lh3.googleusercontent.com"], 
           "frame-src": ["'self'", "https://www.desmos.com", "https://www.geogebra.org", "https://accounts.google.com"], 
           "font-src": ["'self'", "https://cdn.jsdelivr.net", "data:", "https://fonts.gstatic.com"],
           "connect-src": ["'self'", "https://accounts.google.com", "https://www.googleapis.com"]
         },
       },
       referrerPolicy: {
-        policy: "strict-origin-when-cross-origin",
+        policy: "no-referrer-when-downgrade",
       },
-      crossOriginOpenerPolicy: false, 
+      crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" }, 
       crossOriginEmbedderPolicy: false,
     })
 );
@@ -107,6 +112,9 @@ app.get('/academics', (req, res) => res.sendFile(path.join(__dirname, 'public/ac
 
 app.get('/vcontest', (req, res) => res.send('Virtual Contest Coming Soon'));
 app.get('/hypos', (req, res) => res.send('Admin Dashboard Coming Soon'));
+
+app.get('/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public/leaderboard.html')));
+app.get('/u/:username', (req, res) => res.sendFile(path.join(__dirname, 'public/user.html')));
 
 app.post('/api/auth/google', async (req, res) => {
     const { token } = req.body;
@@ -282,14 +290,24 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/problems', authenticateToken, async (req, res) => {
-    const { category, subcategory, sort } = req.query;
+    const { category, subcategory, sort, filter, search } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = 20;
     const offset = (page - 1) * limit;
     
-    let baseQuery = `FROM problems p JOIN users u ON p.author_id = u.user_id`;
-    let params = [];
+    let baseQuery = `
+        FROM problems p 
+        JOIN users u ON p.author_id = u.user_id 
+        LEFT JOIN attempt_counts ac ON p.problem_id = ac.problem_id AND ac.user_id = $1
+    `;
+    let params = [req.user.userId];
     let conditions = [];
+
+    if (search && search.trim() !== '') {
+        const i = params.length + 1;
+        conditions.push(`(p.title ILIKE $${i} OR p.title_bn ILIKE $${i} OR p.category ILIKE $${i})`);
+        params.push(`%${search}%`);
+    }
 
     if (category && category !== 'All') {
         conditions.push(`p.category = $${params.length + 1}`);
@@ -300,6 +318,14 @@ app.get('/api/problems', authenticateToken, async (req, res) => {
         params.push(subcategory);
     }
 
+    if (filter === 'bookmarked') {
+        conditions.push(`p.problem_id = ANY(SELECT UNNEST(bookmarked_problems) FROM user_stats WHERE user_id = $1)`);
+    } else if (filter === 'solved') {
+        conditions.push(`p.problem_id = ANY(SELECT UNNEST(solved_problems) FROM user_stats WHERE user_id = $1)`);
+    } else if (filter === 'unsolved') {
+        conditions.push(`NOT (p.problem_id = ANY(SELECT UNNEST(solved_problems) FROM user_stats WHERE user_id = $1))`);
+    }
+
     if (conditions.length > 0) baseQuery += " WHERE " + conditions.join(" AND ");
 
     const countQuery = `SELECT COUNT(*) ${baseQuery}`;
@@ -307,7 +333,10 @@ app.get('/api/problems', authenticateToken, async (req, res) => {
     const totalItems = parseInt(countRes.rows[0].count);
     const totalPages = Math.ceil(totalItems / limit);
 
-    let dataQuery = `SELECT p.*, u.full_name as author_name ${baseQuery}`;
+    let dataQuery = `
+        SELECT p.*, u.full_name as author_name, COALESCE(ac.count, 0) as user_attempts 
+        ${baseQuery}
+    `;
     if (sort === 'vote_desc') dataQuery += ` ORDER BY (p.upvote_count - p.downvote_count) DESC`;
     else if (sort === 'vote_asc') dataQuery += ` ORDER BY (p.upvote_count - p.downvote_count) ASC`;
     else if (sort === 'ratio_desc') dataQuery += ` ORDER BY (CASE WHEN p.unique_attempts > 0 THEN (p.solve_count::float / p.unique_attempts) ELSE 0 END) DESC`;
@@ -319,19 +348,39 @@ app.get('/api/problems', authenticateToken, async (req, res) => {
 
     try {
         const result = await pool.query(dataQuery, params);
-        const statsRes = await pool.query("SELECT solved_problems FROM user_stats WHERE user_id = $1", [req.user.userId]);
+        const statsRes = await pool.query("SELECT solved_problems, bookmarked_problems FROM user_stats WHERE user_id = $1", [req.user.userId]);
         const solvedIds = statsRes.rows[0]?.solved_problems || [];
+        const bookmarkIds = statsRes.rows[0]?.bookmarked_problems || [];
 
-        const problems = result.rows.map(p => ({
-            ...p,
-            is_solved: solvedIds.includes(p.problem_id)
-        }));
+        const problems = result.rows.map(p => {
+            const baseline = p.initial_score * 0.5;
+            let potential = parseFloat(p.dynamic_score) * Math.pow(0.9, parseInt(p.user_attempts));
+            if (potential < baseline) potential = baseline;
+
+            return {
+                ...p,
+                is_solved: solvedIds.includes(p.problem_id),
+                is_bookmarked: bookmarkIds.includes(p.problem_id),
+                user_potential_score: potential.toFixed(2)
+            };
+        });
 
         res.json({ problems, totalPages, currentPage: page });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch problems" });
     }
+});
+
+app.get('/api/problems/search', authenticateToken, async (req, res) => {
+    const { q } = req.query;
+    try {
+        const result = await pool.query(`
+            SELECT problem_id, title, title_bn, category FROM problems 
+            WHERE title ILIKE $1 OR title_bn ILIKE $1 
+            LIMIT 20`, [`%${q}%`]);
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: "Search failed" }); }
 });
 
 
@@ -348,19 +397,35 @@ app.get('/api/problems/:id', authenticateToken, async (req, res) => {
         if (problemRes.rows.length === 0) return res.status(404).json({ error: "Problem not found" });
         
         const problem = problemRes.rows[0];
-        const statsRes = await pool.query("SELECT liked_posts, disliked_posts FROM user_stats WHERE user_id = $1", [req.user.userId]);
+        const statsRes = await pool.query("SELECT liked_posts, disliked_posts, bookmarked_problems FROM user_stats WHERE user_id = $1", [req.user.userId]);
+        const attemptRes = await pool.query("SELECT count FROM attempt_counts WHERE user_id = $1 AND problem_id = $2", [req.user.userId, id]);
+
         const stats = statsRes.rows[0];
+        const attempts = attemptRes.rows.length > 0 ? attemptRes.rows[0].count : 0;
 
         const prevRes = await pool.query("SELECT problem_id FROM problems WHERE problem_id < $1 ORDER BY problem_id DESC LIMIT 1", [id]);
         const nextRes = await pool.query("SELECT problem_id FROM problems WHERE problem_id > $1 ORDER BY problem_id ASC LIMIT 1", [id]);
 
         delete problem.answer;
+
         const isLiked = stats.liked_posts.includes(problem.problem_id);
         const isDisliked = stats.disliked_posts.includes(problem.problem_id);
 
-        res.json({ ...problem, userStatus: { isLiked, isDisliked },
+        const baseline = problem.initial_score * 0.5;
+        let potential = parseFloat(problem.dynamic_score) * Math.pow(0.9, attempts);
+        if (potential < baseline) potential = baseline;
+
+        res.json({ 
+            ...problem, 
+            userStatus: { 
+                isLiked: stats.liked_posts.includes(problem.problem_id),
+                isDisliked: stats.disliked_posts.includes(problem.problem_id),
+                isBookmarked: stats.bookmarked_problems.includes(problem.problem_id)
+            },
+            user_potential_score: potential.toFixed(2),
             prevId: prevRes.rows.length > 0 ? prevRes.rows[0].problem_id : null,
-            nextId: nextRes.rows.length > 0 ? nextRes.rows[0].problem_id : null });
+            nextId: nextRes.rows.length > 0 ? nextRes.rows[0].problem_id : null 
+        });
 
     } catch (err) {
         res.status(500).json({ error: "Error details" });
@@ -373,22 +438,40 @@ app.post('/api/problems/upload', authenticateToken, uploadProblem.single('figure
         const userMeta = await pool.query("SELECT user_category FROM user_metadata WHERE user_id = $1", [req.user.userId]);
         if (parseInt(userMeta.rows[0]?.user_category) < 0) return res.status(403).json({ error: "Access denied." });
     } catch (err) { return res.status(500).json({ error: "Auth Error" }); }
-    const { title, description, answer, category, subcategory } = req.body;
+
+    const { 
+        title, description, answer, category, subcategory, score, 
+        errorMargin, rangeStart, rangeEnd, answerType, 
+        titleBn, descriptionBn 
+    } = req.body;
     
-    if (!title) return res.status(400).json({ error: "Title is required" });
+    if (!title && !titleBn) return res.status(400).json({ error: "Title is required (English or Bengali)" });
 
     const initScore = score ? parseInt(score) : 10;
+    const type = answerType || 'numeric';
+
+    let eMargin = null, rStart = null, rEnd = null;
+    if (type === 'numeric') {
+        eMargin = errorMargin ? parseFloat(errorMargin) : null;
+        rStart = rangeStart ? parseFloat(rangeStart) : null;
+        rEnd = rangeEnd ? parseFloat(rangeEnd) : null;
+    }
 
     let figureUrl = null;
-    if (req.file) {
-        figureUrl = `/uploads/questions/figures/${req.file.filename}`;
-    }
+    if (req.file) figureUrl = `/uploads/questions/figures/${req.file.filename}`;
 
     try {
         await pool.query(
-            `INSERT INTO problems (author_id, title, description, answer, category, subcategory, figure_url, initial_score, dynamic_score) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
-            [req.user.userId, title, description, answer, category, subcategory, figureUrl, initScore]
+            `INSERT INTO problems (
+                author_id, title, description, answer, category, subcategory, figure_url, 
+                initial_score, dynamic_score, error_margin, range_start, range_end,
+                answer_type, title_bn, description_bn
+            ) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14)`, 
+            [
+                req.user.userId, title || null, description || null, answer, category, subcategory, figureUrl, 
+                initScore, eMargin, rStart, rEnd, type, titleBn || null, descriptionBn || null
+            ]
         );
         res.json({ message: "Problem uploaded successfully!" });
     } catch (err) {
@@ -409,13 +492,17 @@ app.post('/api/problems/:id/check', authenticateToken, async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        const problemRes = await client.query("SELECT answer, initial_score, dynamic_score FROM problems WHERE problem_id = $1", [problemId]);
+        const problemRes = await client.query(
+            "SELECT answer, initial_score, dynamic_score, error_margin, range_start, range_end FROM problems WHERE problem_id = $1", 
+            [problemId]
+        );
+        
         if (problemRes.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ error: "Problem not found" });
         }
         
-        const { answer: correctAnswer, initial_score, dynamic_score } = problemRes.rows[0];
+        const { answer: correctAnswer, initial_score, dynamic_score, error_margin, range_start, range_end } = problemRes.rows[0];
         
         const userStatsRes = await client.query("SELECT solved_problems, attempted_problems FROM user_stats WHERE user_id = $1", [userId]);
         const solvedArr = userStatsRes.rows[0].solved_problems || [];
@@ -424,7 +511,33 @@ app.post('/api/problems/:id/check', authenticateToken, async (req, res) => {
         const attemptRes = await client.query("SELECT count FROM attempt_counts WHERE user_id = $1 AND problem_id = $2", [userId, problemId]);
         let attemptCount = attemptRes.rows.length > 0 ? attemptRes.rows[0].count : 0;
 
-        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+        let isCorrect = false;
+        
+        if (userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase()) {
+            isCorrect = true;
+        } 
+        else if (!isNaN(parseFloat(userAnswer))) {
+            const uVal = parseFloat(userAnswer);
+
+            if (range_start !== null && range_end !== null) {
+                if (uVal >= parseFloat(range_start) && uVal <= parseFloat(range_end)) {
+                    isCorrect = true;
+                }
+            }
+            
+            if (!isCorrect && error_margin !== null && !isNaN(parseFloat(correctAnswer))) {
+                const cVal = parseFloat(correctAnswer);
+                const margin = parseFloat(error_margin);
+                if (Math.abs(uVal - cVal) <= margin) {
+                    isCorrect = true;
+                }
+            }
+        }
+
+        await client.query(
+            "INSERT INTO submission_logs (user_id, problem_id, is_correct, submitted_at) VALUES ($1, $2, $3, NOW())",
+            [userId, problemId, isCorrect]
+        );
 
         if (!isCorrect) {
             await client.query(
@@ -447,8 +560,6 @@ app.post('/api/problems/:id/check', authenticateToken, async (req, res) => {
             return res.json({ correct: true, message: "Correct! (You already solved this)" });
         }
         const baseline = initial_score * 0.5;
-        
-
         let userPoints = dynamic_score * Math.pow(0.9, attemptCount);
         if (userPoints < baseline) userPoints = baseline;
         
@@ -494,6 +605,32 @@ app.get('/api/auth/config', (req, res) => {
     res.json({ clientId: process.env.GOOGLE_CLIENT_ID });
 });
 
+
+app.get('/api/users/:username/activity', async (req, res) => {
+    const { username } = req.params;
+    try {
+        const userRes = await pool.query("SELECT user_id FROM users WHERE username = $1", [username]);
+        if (userRes.rows.length === 0) return res.status(404).json({ error: "User not found" });
+        const userId = userRes.rows[0].user_id;
+
+        const activityRes = await pool.query(`
+            SELECT DATE(submitted_at)::text as date, COUNT(*) as count 
+            FROM submission_logs 
+            WHERE user_id = $1 AND submitted_at > NOW() - INTERVAL '1 year'
+            GROUP BY DATE(submitted_at)
+        `, [userId]);
+        const activityMap = {};
+        activityRes.rows.forEach(row => {
+            activityMap[row.date] = parseInt(row.count);
+        });
+
+        res.json(activityMap);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to load activity" });
+    }
+});
+
 app.get('/api/my-problems', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
@@ -508,7 +645,7 @@ app.get('/api/my-problems', authenticateToken, async (req, res) => {
 
 app.put('/api/problems/:id', authenticateToken, uploadProblem.single('figure'), async (req, res) => {
     const { id } = req.params;
-    const { title, description, category, subcategory } = req.body;
+    const { title, description, answer, category, subcategory, score, errorMargin, rangeStart, rangeEnd } = req.body;
 
     try {
         const check = await pool.query("SELECT author_id, figure_url FROM problems WHERE problem_id = $1", [id]);
@@ -520,15 +657,23 @@ app.put('/api/problems/:id', authenticateToken, uploadProblem.single('figure'), 
             figureUrl = `/uploads/questions/figures/${req.file.filename}`;
         }
         const initScore = score ? parseInt(score) : 10;
+        const eMargin = errorMargin ? parseFloat(errorMargin) : null;
+        const rStart = rangeStart ? parseFloat(rangeStart) : null;
+        const rEnd = rangeEnd ? parseFloat(rangeEnd) : null;
 
         await pool.query(
-        `UPDATE problems 
-         SET title = $1, description = $2, category = $3, subcategory = $4, figure_url = $5, initial_score = $6, dynamic_score = $6 
-         WHERE problem_id = $7`,
-        [title, description, category, subcategory, figureUrl, initScore, id]
-    );
-    res.json({ message: "Problem updated successfully" });
-    } catch (err) { res.status(500).json({ error: "Update failed" }); }
+            `UPDATE problems 
+             SET title = $1, description = $2, answer = $3, category = $4, subcategory = $5, figure_url = $6, 
+                 initial_score = $7, dynamic_score = $7, 
+                 error_margin = $8, range_start = $9, range_end = $10
+             WHERE problem_id = $11`,
+            [title, description, answer, category, subcategory, figureUrl, initScore, eMargin, rStart, rEnd, id]
+        );
+        res.json({ message: "Problem updated successfully" });
+    } catch (err) { 
+        console.error(err);
+        res.status(500).json({ error: "Update failed" }); 
+    }
 });
 
 app.delete('/api/problems/:id', authenticateToken, async (req, res) => {
@@ -574,7 +719,26 @@ app.delete('/api/problems/:id', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/api/problems/:id/comments', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { content } = req.body;
+    const userId = req.user.userId;
 
+    if (!content || content.trim() === "") {
+        return res.status(400).json({ error: "Comment cannot be empty" });
+    }
+
+    try {
+        await pool.query(
+            "INSERT INTO comments (problem_id, user_id, content) VALUES ($1, $2, $3)",
+            [id, userId, content]
+        );
+        res.json({ message: "Comment posted successfully" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to post comment" });
+    }
+});
 
 app.get('/api/problems/:id/comments', authenticateToken, async (req, res) => {
     const { id } = req.params;
@@ -864,7 +1028,8 @@ app.get('/api/profile/me', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT u.username, u.email, u.full_name, u.institute, u.study_level, u.phone_no, u.short_bio,
-                   m.date_of_birth, m.profile_pic_url
+                   m.date_of_birth, m.profile_pic_url,
+                   m.twitter_url, m.instagram_url, m.facebook_url, m.website_url
             FROM users u
             JOIN user_metadata m ON u.user_id = m.user_id
             WHERE u.user_id = $1
@@ -873,29 +1038,31 @@ app.get('/api/profile/me', authenticateToken, async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: "Failed to fetch profile" });
     }
-});
+    });
 
-app.post('/api/profile/update', authenticateToken, async (req, res) => {
-    const { full_name, phone_no, short_bio, institute, study_level, dob } = req.body;
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-        await client.query(
-            "UPDATE users SET full_name=$1, phone_no=$2, short_bio=$3, institute=$4, study_level=$5 WHERE user_id=$6",
-            [full_name, phone_no, short_bio, institute, study_level, req.user.userId]
-        );
-        await client.query(
-            "UPDATE user_metadata SET date_of_birth=$1 WHERE user_id=$2",
-            [dob || null, req.user.userId]
-        );
-        await client.query('COMMIT');
-        res.json({ message: "Profile updated" });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(err);
-        res.status(500).json({ error: "Update failed" });
-    } finally { client.release(); }
-});
+    app.post('/api/profile/update', authenticateToken, async (req, res) => {
+        const { full_name, phone_no, short_bio, institute, study_level, dob, twitter, instagram, facebook, website } = req.body;
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query(
+                "UPDATE users SET full_name=$1, phone_no=$2, short_bio=$3, institute=$4, study_level=$5 WHERE user_id=$6",
+                [full_name, phone_no, short_bio, institute, study_level, req.user.userId]
+            );
+            await client.query(
+                `UPDATE user_metadata 
+                 SET date_of_birth=$1, twitter_url=$2, instagram_url=$3, facebook_url=$4, website_url=$5 
+                 WHERE user_id=$6`,
+                [dob || null, twitter, instagram, facebook, website, req.user.userId]
+            );
+            await client.query('COMMIT');
+            res.json({ message: "Profile updated" });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            console.error(err);
+            res.status(500).json({ error: "Update failed" });
+        } finally { client.release(); }
+    });
 
 app.post('/api/profile/upload-photo', authenticateToken, uploadProfile.single('photo'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -951,6 +1118,223 @@ app.post('/api/profile/change-password', authenticateToken, async (req, res) => 
     } catch (err) {
         res.status(500).json({ error: "Server error" });
     }
+});
+
+app.post('/api/problems/:id/bookmark', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const problemId = parseInt(id);
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const userStats = await client.query("SELECT bookmarked_problems FROM user_stats WHERE user_id = $1", [userId]);
+        let bookmarks = userStats.rows[0].bookmarked_problems || [];
+
+        let isBookmarked = false;
+        if (bookmarks.includes(problemId)) {
+            bookmarks = bookmarks.filter(bid => bid !== problemId);
+            isBookmarked = false;
+        } else {
+            bookmarks.push(problemId);
+            isBookmarked = true;
+        }
+
+
+        await client.query("UPDATE user_stats SET bookmarked_problems = $1 WHERE user_id = $2", [bookmarks, userId]);
+        await client.query('COMMIT');
+        
+        res.json({ message: isBookmarked ? "Bookmarked" : "Removed Bookmark", isBookmarked });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: "Action failed" });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/leaderboard', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT u.username, u.full_name, m.profile_pic_url, s.current_rating
+            FROM users u
+            JOIN user_metadata m ON u.user_id = m.user_id
+            JOIN user_stats s ON u.user_id = s.user_id
+            ORDER BY s.current_rating DESC, m.registration_time ASC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+});
+
+app.get('/api/users/:username', async (req, res) => {
+    const { username } = req.params;
+    try {
+        const userRes = await pool.query(`
+            SELECT u.user_id, u.username, u.full_name, u.institute, u.short_bio,
+                   m.profile_pic_url, m.registration_time, 
+                   m.twitter_url, m.instagram_url, m.facebook_url, m.website_url,
+                   s.current_rating, s.solved_problems, s.attempted_problems
+            FROM users u
+            JOIN user_metadata m ON u.user_id = m.user_id
+            JOIN user_stats s ON u.user_id = s.user_id
+            WHERE u.username = $1
+        `, [username]);
+
+        if (userRes.rows.length === 0) return res.status(404).json({ error: "User not found" });
+        const user = userRes.rows[0];
+
+        const rankRes = await pool.query(`
+            SELECT COUNT(*) + 1 as rank FROM user_stats WHERE current_rating > $1
+        `, [user.current_rating]);
+        user.rank = rankRes.rows[0].rank;
+
+        const authoredRes = await pool.query(`
+            SELECT problem_id, title, upvote_count, created_at 
+            FROM problems WHERE author_id = $1 ORDER BY created_at DESC
+        `, [user.user_id]);
+        user.authored_problems = authoredRes.rows;
+
+        const commentsRes = await pool.query(`
+            SELECT c.content, c.created_at, p.title as problem_title, p.problem_id
+            FROM comments c
+            JOIN problems p ON c.problem_id = p.problem_id
+            WHERE c.user_id = $1
+            ORDER BY c.created_at DESC LIMIT 10
+        `, [user.user_id]);
+        user.recent_comments = commentsRes.rows;
+
+        const attemptedIds = user.attempted_problems || [];
+        const solvedIds = user.solved_problems || [];
+        
+        let categoryStats = {};
+
+        if (attemptedIds.length > 0) {
+            const problemsRes = await pool.query(`
+                SELECT problem_id, category FROM problems WHERE problem_id = ANY($1)
+            `, [attemptedIds]);
+
+            problemsRes.rows.forEach(p => {
+                if (!categoryStats[p.category]) {
+                    categoryStats[p.category] = { attempted: 0, solved: 0 };
+                }
+                categoryStats[p.category].attempted++;
+                if (solvedIds.includes(p.problem_id)) {
+                    categoryStats[p.category].solved++;
+                }
+            });
+        }
+        user.category_stats = categoryStats;
+
+        res.json(user);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to load profile" });
+    }
+});
+
+app.get('/api/translations/incoming', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT t.*, p.title as original_title, u.username as translator_name
+            FROM problem_translations t
+            JOIN problems p ON t.problem_id = p.problem_id
+            JOIN users u ON t.translator_id = u.user_id
+            WHERE p.author_id = $1 AND t.status = 'pending'
+            ORDER BY t.created_at DESC
+        `, [req.user.userId]);
+        res.json(result.rows);
+    } catch (err) { 
+        console.error("INCOMING ERROR:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+app.get('/api/translations/outgoing', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT t.*, p.title as original_title
+            FROM problem_translations t
+            JOIN problems p ON t.problem_id = p.problem_id
+            WHERE t.translator_id = $1
+            ORDER BY t.created_at DESC
+        `, [req.user.userId]);
+        res.json(result.rows);
+    } catch (err) { 
+        console.error("OUTGOING ERROR:", err);
+        res.status(500).json({ error: err.message }); 
+    }
+});
+app.post('/api/translations/submit', authenticateToken, async (req, res) => {
+    const { problemId, language, title, description } = req.body;
+    try {
+        const check = await pool.query("SELECT author_id FROM problems WHERE problem_id = $1", [problemId]);
+        if (check.rows.length === 0) return res.status(404).json({ error: "Problem not found" });
+
+        if (check.rows[0].author_id === req.user.userId) {
+            const colTitle = language === 'bn' ? 'title_bn' : 'title';
+            const colDesc = language === 'bn' ? 'description_bn' : 'description';
+            await pool.query(
+                `UPDATE problems SET ${colTitle} = $1, ${colDesc} = $2 WHERE problem_id = $3`,
+                [title, description, problemId]
+            );
+            return res.json({ message: "Translation added successfully (Self-Authored)" });
+        }
+
+        await pool.query(
+            `INSERT INTO problem_translations (problem_id, translator_id, language, title, description)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [problemId, req.user.userId, language, title, description]
+        );
+        res.json({ message: "Translation submitted for approval" });
+
+    } catch (err) { res.status(500).json({ error: "Submission failed" }); }
+});
+
+app.post('/api/translations/decide', authenticateToken, async (req, res) => {
+    const { translationId, action, editedTitle, editedDesc } = req.body;
+    
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const transRes = await client.query(`
+            SELECT t.*, p.author_id 
+            FROM problem_translations t
+            JOIN problems p ON t.problem_id = p.problem_id
+            WHERE t.translation_id = $1
+        `, [translationId]);
+
+        if (transRes.rows.length === 0) throw new Error("Not found");
+        const trans = transRes.rows[0];
+
+        if (trans.author_id !== req.user.userId) return res.status(403).json({ error: "Unauthorized" });
+
+        if (action === 'reject') {
+            await client.query("UPDATE problem_translations SET status = 'rejected' WHERE translation_id = $1", [translationId]);
+        } else {
+            const finalTitle = editedTitle || trans.title;
+            const finalDesc = editedDesc || trans.description;
+            const colTitle = trans.language === 'bn' ? 'title_bn' : 'title';
+            const colDesc = trans.language === 'bn' ? 'description_bn' : 'description';
+
+            await client.query(
+                `UPDATE problems SET ${colTitle} = $1, ${colDesc} = $2 WHERE problem_id = $3`,
+                [finalTitle, finalDesc, trans.problem_id]
+            );
+            await client.query("UPDATE problem_translations SET status = 'approved' WHERE translation_id = $1", [translationId]);
+        }
+
+        await client.query('COMMIT');
+        res.json({ message: `Translation ${action}ed` });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ error: "Action failed" });
+    } finally { client.release(); }
 });
 
 app.listen(port, () => {

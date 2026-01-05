@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Leaderboard - NDMC</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
+    <style>
+        .leaderboard-container { max-width: 800px; margin: 0 auto; padding-top: 100px; }
+        
+        .lb-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(30, 30, 45, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+        }
+        
+        .lb-table th {
+            background: rgba(120, 111, 239, 0.1);
+            color: var(--purple-main);
+            text-align: left;
+            padding: 15px 20px;
+            font-weight: 700;
+        }
+        
+        .lb-table td {
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: white;
+        }
+        
+        .lb-row { transition: background 0.2s; cursor: pointer; }
+        .lb-row:hover { background: rgba(255,255,255,0.05); }
+        
+        .user-cell { display: flex; align-items: center; gap: 12px; }
+        .lb-avatar { 
+            width: 35px; height: 35px; border-radius: 50%; object-fit: cover; 
+            border: 2px solid var(--purple-main); 
+        }
+        .rank-num { font-weight: bold; color: #aaa; width: 30px; }
+        .rank-1 { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+        .rank-2 { color: #C0C0C0; }
+        .rank-3 { color: #CD7F32; }
+
+        .rating-badge {
+            background: rgba(120, 111, 239, 0.2);
+            color: var(--purple-main);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="leaderboard-container">
+        <h1 style="text-align:center; margin-bottom:30px;">🏆 Leaderboard</h1>
+        
+        <table class="lb-table">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">#</th>
+                    <th>User</th>
+                    <th style="text-align:right;">Rating</th>
+                </tr>
+            </thead>
+            <tbody id="lbBody">
+                <tr><td colspan="3" style="text-align:center; padding:30px;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadLeaderboard() {
+            try {
+                const res = await fetch('/api/leaderboard');
+                const users = await res.json();
+                const tbody = document.getElementById('lbBody');
+                
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No users found.</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                let currentRank = 1;
+                
+                users.forEach((u, index) => {
+                    if (index > 0 && u.current_rating < users[index - 1].current_rating) {
+                        currentRank = index + 1;
+                    }
+                    
+                    const avatar = u.profile_pic_url || "https://via.placeholder.com/40?text=?";
+                    const rankClass = currentRank <= 3 ? `rank-${currentRank}` : '';
+                    const medal = currentRank === 1 ? '👑 ' : '';
+                    
+                    html += `
+                    <tr class="lb-row" onclick="window.location.href='/u/${u.username}'">
+                        <td><div class="rank-num ${rankClass}">${currentRank}</div></td>
+                        <td>
+                            <div class="user-cell">
+                                <img src="${avatar}" class="lb-avatar" onerror="this.src='https://via.placeholder.com/40?text=?'">
+                                <div>
+                                    <div style="font-weight:600;">${medal}${u.full_name}</div>
+                                    <div style="font-size:0.85rem; color:#888;">@${u.username}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="text-align:right;">
+                            <span class="rating-badge">${parseFloat(u.current_rating).toFixed(0)}</span>
+                        </td>
+                    </tr>`;
+                    
+                });
+
+                tbody.innerHTML = html;
+            } catch (err) {
+                console.error(err);
+                document.getElementById('lbBody').innerHTML = '<tr><td colspan="3" style="text-align:center; color:red;">Failed to load leaderboard.</td></tr>';
+            }
+        }
+
+        loadLeaderboard();
+    </script>
+</body>
+</html>

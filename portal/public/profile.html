@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>My Profile</title>
-    <link rel="stylesheet" href="css/theme.css">
-    <link rel="stylesheet" href="css/global.css">
-    <script src="js/header.js"></script>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -17,7 +17,7 @@
                 <div>
                     <input type="file" id="photoInput" accept="image/*" style="display:none;" onchange="uploadPhoto()">
                     <button class="btn-primary" onclick="document.getElementById('photoInput').click()">Change Photo</button>
-                    <p style="font-size:0.8rem; color:#aaa; margin-top:5px;">Max 1MB</p>
+                    <p style="font-size:0.8rem; color:#aaa; margin-top:5px;">Max 2MB</p>
                 </div>
             </div>
 
@@ -27,6 +27,14 @@
                 
                 <label>Institute</label>
                 <input type="text" id="pInst">
+
+                <label style="margin-top:15px; display:block; color:#aaa; font-size:0.9rem;">Social Links</label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <input type="text" id="pTwitter" placeholder="X URL">
+                    <input type="text" id="pInstagram" placeholder="Instagram URL">
+                    <input type="text" id="pFacebook" placeholder="Facebook URL">
+                    <input type="text" id="pWebsite" placeholder="Portfolio/Website URL">
+                </div>
                 
                 <div style="display:flex; gap:10px;">
                     <div style="flex:1;">
@@ -92,6 +100,10 @@
             if(u.study_level) document.getElementById('pLevel').value = u.study_level;
             if(u.date_of_birth) document.getElementById('pDob').value = u.date_of_birth.split('T')[0];
             if(u.profile_pic_url) document.getElementById('profilePreview').src = u.profile_pic_url;
+            if(u.twitter_url) document.getElementById('pGithub').value = u.twitter_url;
+            if(u.instagram_url) document.getElementById('pLinkedin').value = u.instagram_url;
+            if(u.facebook_url) document.getElementById('pFacebook').value = u.facebook_url;
+            if(u.website_url) document.getElementById('pWebsite').value = u.website_url;
         };
 
         async function uploadPhoto() {
@@ -110,7 +122,7 @@
                 const data = await res.json();
                 document.getElementById('profilePreview').src = data.url;
             } else {
-                alert("Upload failed (Max 1MB)");
+                alert("Upload failed (Max 2MB)");
             }
         }
 
@@ -122,7 +134,11 @@
                 phone_no: document.getElementById('pPhone').value,
                 study_level: document.getElementById('pLevel').value,
                 short_bio: document.getElementById('pBio').value,
-                dob: document.getElementById('pDob').value
+                dob: document.getElementById('pDob').value,
+                twitter: document.getElementById('pTwitter').value,
+                instagram: document.getElementById('pInstagram').value,
+                facebook: document.getElementById('pFacebook').value,
+                website: document.getElementById('pWebsite').value
             };
             
             const res = await fetch('/api/profile/update', {

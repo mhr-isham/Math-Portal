@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Problems - NDMC</title>
-    <link rel="stylesheet" href="css/theme.css">
-    <link rel="stylesheet" href="css/global.css">
-    <script src="js/header.js"></script>
+    <title>Problems</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
     <script> window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } }; </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     
@@ -94,6 +94,7 @@
         <h2 style="margin-bottom: 20px; font-size: 2rem;">Problem Archive</h2>
         
         <div class="filter-bar">
+            <input type="text" id="searchFilter" placeholder="Search problems..." class="filter-select" style="min-width: 200px; padding: 10px; background: rgba(30,30,45,0.8); border: 1px solid rgba(255,255,255,0.1); color: white;" oninput="debounceLoad()">
             <select id="catFilter" class="filter-select" onchange="updateSubcats()">
                 <option value="All">All Categories</option>
                 <option value="Number Theory">Number Theory</option>
@@ -101,6 +102,13 @@
                 <option value="Geometry">Geometry</option>
                 <option value="Algebra">Algebra</option>
                 <option value="Others">Others</option>
+            </select>
+
+            <select id="statusFilter" class="filter-select" onchange="loadProblems()">
+                <option value="all">Show All</option>
+                <option value="bookmarked">Bookmarked</option>
+                <option value="solved">Solved</option>
+                <option value="unsolved">Unsolved</option>
             </select>
             
             <select id="subFilter" class="filter-select" onchange="loadProblems()" style="flex:1;">
@@ -124,7 +132,7 @@
         const subCats = {
             'Algebra': ['Function', 'Polynomial', 'Inequality'],
             'Combinatorics': ['Counting', 'Probability', 'Graph Theory'],
-            'Number Theory': [], 'Geometry': [], 'Others': ['Physics', 'Astronomy']
+            'Number Theory': [], 'Geometry': [], 'Others': ['Physics', 'Astronomy', 'Calculus']
         };
 
         if(!token) {
@@ -146,6 +154,14 @@
             loadProblems();
         }
 
+        let searchTimeout;
+        function debounceLoad() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                loadProblems(1);
+            }, 400);
+        }
+
 
         let currentPage = 1;
         async function loadProblems(page = 1) {
@@ -155,8 +171,10 @@
             const cat = document.getElementById('catFilter').value;
             const sub = document.getElementById('subFilter').value;
             const sort = document.getElementById('sortFilter').value;
+            const status = document.getElementById('statusFilter').value;
+            const search = document.getElementById('searchFilter').value;
 
-            const url = `/api/problems?category=${encodeURIComponent(cat)}&subcategory=${encodeURIComponent(sub)}&sort=${sort}&page=${page}`;
+            const url = `/api/problems?category=${encodeURIComponent(cat)}&subcategory=${encodeURIComponent(sub)}&sort=${sort}&filter=${status}&search=${encodeURIComponent(search)}&page=${page}`;
             
             try {
                 const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -171,15 +189,20 @@
                     const ratio = p.unique_attempts > 0 ? ((p.solve_count / p.unique_attempts) * 100).toFixed(0) + '%' : '0%';
                     const netVotes = p.upvote_count - p.downvote_count;
                     const solvedClass = p.is_solved ? 'solved' : '';
-                    const displayScore = parseFloat(p.dynamic_score).toFixed(1);
-                    
+
+                    const initial = p.initial_score;
+                    const potential = p.user_potential_score;
+                    const bookmarkIcon = p.is_bookmarked ? '🔖' : '';
+
                     return `
                     <div class="problem-card ${solvedClass}" onclick="window.location.href='/problems/${p.problem_id}'">
                         <div>
                             <div class="card-header">
                                 <span class="prob-tag">${p.category}</span>
-                                ${p.subcategory ? `<span style="font-size:0.7rem; color:#888;">${p.subcategory}</span>` : ''}
-                                <span style="font-size:0.8rem; color:var(--purple-main); font-weight:bold; margin-left:auto;">${displayScore} Pts</span>
+                                ${bookmarkIcon ? `<span style="margin-left:5px;">${bookmarkIcon}</span>` : ''}
+                                <span style="font-size:0.8rem; color:var(--purple-main); font-weight:bold; margin-left:auto;">
+                                    Marks: ${potential} <span style="color:#666; font-weight:400;">/ ${initial}</span>
+                                </span>
                             </div>
                             <div class="prob-title">${p.title}</div>
                             <div style="font-size:0.85rem; color:#888; margin-top:5px;">By ${p.author_name}</div>

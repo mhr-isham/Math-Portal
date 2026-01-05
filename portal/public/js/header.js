@@ -8,7 +8,8 @@ document.addEventListener("DOMContentLoaded", () => {
         <nav class="nav-links">
             <a href="/" class="nav-item ${path === '/' ? 'active' : ''}">Home</a>
             <a href="/problems" class="nav-item ${path.includes('/problems') ? 'active' : ''}">Problems</a>
-            <a href="/vcontest" class="nav-item">Contest</a>
+            <a href="/leaderboard" class="nav-item ${path.includes('/leaderboard') ? 'active' : ''}">Leaderboard</a>
+            <a href="/vcontest" class="nav-item ${path.includes('/vcontest') ? 'active' : ''}">Contest</a>
             <div id="authSection" style="margin-left:20px;"></div>
         </nav>
     </header>`;
@@ -23,7 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (parseInt(cat) >= 0) {
                 html += `<a href="/academics" class="nav-item ${path === '/academics' ? 'active' : ''}" style="margin-right:20px; color:var(--purple-main);">Academic Dashboard</a>`;
             }
-            html += `<a href="/profile" class="nav-item">👤 Profile</a>`;
+            html += `<a href="/profile" class="nav-item ${path === '/profile' ? 'active' : ''}">👤 Profile</a>`;
             html += `<a href="#" onclick="logout()" class="nav-item" style="color:#ff6b6b; margin-left:15px;">Logout</a>`;
             authSection.innerHTML = html;
         });
