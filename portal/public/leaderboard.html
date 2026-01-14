@@ -90,13 +90,17 @@
                 let currentRank = 1;
                 
                 users.forEach((u, index) => {
-                    if (index > 0 && u.current_rating < users[index - 1].current_rating) {
+                    const currentRating = parseFloat(u.current_rating);
+                    const prevRating = index > 0 ? parseFloat(users[index - 1].current_rating) : 0;
+                    if (index > 0 && currentRating < prevRating) {
                         currentRank = index + 1;
                     }
                     
                     const avatar = u.profile_pic_url || "https://via.placeholder.com/40?text=?";
                     const rankClass = currentRank <= 3 ? `rank-${currentRank}` : '';
                     const medal = currentRank === 1 ? '👑 ' : '';
+
+                    const displayRating = currentRating.toFixed(3);
                     
                     html += `
                     <tr class="lb-row" onclick="window.location.href='/u/${u.username}'">
@@ -111,7 +115,7 @@
                             </div>
                         </td>
                         <td style="text-align:right;">
-                            <span class="rating-badge">${parseFloat(u.current_rating).toFixed(0)}</span>
+                            <span class="rating-badge">${displayRating}</span>
                         </td>
                     </tr>`;
                     

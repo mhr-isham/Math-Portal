@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Contest Overview - NDMC</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
+    <script> window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } }; </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .history-container { max-width: 900px; margin: 0 auto; padding-top: 50px; }
+        
+        .header-card {
+            background: rgba(30, 30, 45, 0.8); padding: 30px; border-radius: 15px;
+            border: 1px solid var(--purple-main); margin-bottom: 30px;
+            display: flex; align-items: center; gap: 20px;
+        }
+        .user-avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--purple-main); }
+        .stats-row { display: flex; gap: 30px; margin-top: 15px; }
+        .stat-item { text-align: center; }
+        .stat-val { font-size: 1.2rem; font-weight: bold; color: white; }
+        .stat-label { font-size: 0.8rem; color: #aaa; text-transform: uppercase; }
+
+        .prob-card {
+            background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1);
+            padding: 20px; border-radius: 10px; margin-bottom: 20px; position: relative;
+        }
+        .prob-card.correct { border: 1px solid var(--green-main); box-shadow: 0 0 10px rgba(33, 232, 42, 0.1); }
+        .prob-card.wrong { border: 1px solid var(--red-main); box-shadow: 0 0 10px rgba(211, 47, 47, 0.1); }
+        .prob-card.unsubmitted { opacity: 0.7; }
+
+        .status-tag {
+            position: absolute; top: 20px; right: 20px;
+            padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8rem;
+        }
+        .tag-correct { background: rgba(33, 232, 42, 0.2); color: var(--green-main); }
+        .tag-wrong { background: rgba(211, 47, 47, 0.2); color: var(--red-main); }
+        .tag-none { background: rgba(255,255,255,0.1); color: #aaa; }
+
+        .history-log { margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px; font-size: 0.9rem; }
+        .log-item { display: flex; justify-content: space-between; color: #ccc; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 5px 0; }
+        .log-item:last-child { border: none; font-weight: bold; color: white; }
+    </style>
+</head>
+<body>
+    <div class="history-container">
+        <div id="headerContent" class="header-card">Loading...</div>
+        <h3 style="margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px;">Problem Analysis</h3>
+        <div id="problemsList"></div>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const publicId = params.get('id');
+
+        if(!publicId) document.body.innerHTML = "<h2 style='text-align:center; margin-top:50px;'>Invalid Link</h2>";
+
+        async function loadOverview() {
+            try {
+                const res = await fetch(`/api/contest/overview/${publicId}`);
+                if(!res.ok) throw new Error("Not Found");
+                const data = await res.json();
+                const mins = Math.floor(data.stats.timeTaken / 60);
+                const secs = data.stats.timeTaken % 60;
+                
+                document.getElementById('headerContent').innerHTML = `
+                    <img src="${data.user.avatar || '/default-avatar.png'}" class="user-avatar" onerror="this.src='https://via.placeholder.com/80'">
+                    <div style="flex:1;">
+                        <h2 style="margin:0; color:white;">${data.user.name}</h2>
+                        <div style="color:var(--purple-main);">@${data.user.username}</div>
+                        
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <div class="stat-val">${data.stats.total}</div>
+                                <div class="stat-label">Total Qs</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-val" style="color:var(--green-main)">${data.stats.correct}</div>
+                                <div class="stat-label">Correct</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-val" style="color:var(--red-main)">${data.stats.incorrect}</div>
+                                <div class="stat-label">Wrong</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-val" style="color:#aaa">${data.stats.unsubmitted}</div>
+                                <div class="stat-label">Unsubmitted</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-val">${mins}m ${secs}s</div>
+                                <div class="stat-label">Time</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('problemsList').innerHTML = data.problems.map((p, i) => {
+                    let cardClass = 'unsubmitted';
+                    let tagHtml = '<span class="status-tag tag-none">Unsubmitted</span>';
+                    
+                    if(p.status === 'correct') {
+                        cardClass = 'correct';
+                        tagHtml = '<span class="status-tag tag-correct">Correct</span>';
+                    } else if (p.status === 'wrong') {
+                        cardClass = 'wrong';
+                        tagHtml = '<span class="status-tag tag-wrong">Incorrect</span>';
+                    }
+                    let historyHtml = '';
+                    if(p.history && p.history.length > 0) {
+                        historyHtml = `<div class="history-log"><div style="margin-bottom:5px; color:#aaa;">Submission History:</div>`;
+                        p.history.forEach((h, idx) => {
+                            const t = new Date(h.time).toLocaleTimeString();
+                            historyHtml += `<div class="log-item"><span>Attempt ${idx+1}: ${h.answer}</span> <span style="font-size:0.8rem;">${t}</span></div>`;
+                        });
+                        historyHtml += `</div>`;
+                    }
+
+                    return `
+                    <div class="prob-card ${cardClass}">
+                        ${tagHtml}
+                        <div style="font-weight:bold; color:#888; margin-bottom:5px;">Problem ${i+1} (${p.category})</div>
+                        <div style="font-size:1.1rem; margin-bottom:10px;">${p.title}</div>
+                        ${p.figure_url ? `<img src="${p.figure_url}" style="max-height:100px; border:1px solid #333; margin:10px 0;">` : ''}
+                        
+                        ${historyHtml}
+                    </div>
+                    `;
+                }).join('');
+
+                if(window.MathJax) MathJax.typesetPromise();
+
+            } catch (e) {
+                document.body.innerHTML = "<h2 style='text-align:center; color:var(--red-main); margin-top:50px;'>Contest not found or private.</h2>";
+            }
+        }
+
+        loadOverview();
+    </script>
+</body>
+</html>

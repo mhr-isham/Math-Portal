@@ -106,6 +106,9 @@
             <button class="tab-btn" onclick="switchTab('edit')">
                 Edit Question <span id="mainPing" style="display:none;" class="ping-dot"></span>
             </button>
+            <button class="tab-btn" onclick="switchTab('suggestions')">
+                Suggestions <span id="suggestPing" style="display:none;" class="ping-dot"></span>
+            </button>
         </div>
 
         <div id="uploadPanel" class="panel active">
@@ -222,6 +225,51 @@
 
             <div id="sub-requests" class="sub-panel" style="display:none;">
                 <div id="requestList"></div>
+            </div>
+        </div>
+        <div id="suggestionsPanel" class="panel">
+            <div style="display:flex; gap:20px; height: calc(100vh - 200px);">
+                <div id="suggestionList" style="flex:1; overflow-y:auto; padding-right:10px; border-right:1px solid rgba(255,255,255,0.1);">
+                    <p style="text-align:center; color:#aaa;">Loading...</p>
+                </div>
+        
+                <div id="suggestionDetail" style="flex:1.5; padding:20px; background:rgba(0,0,0,0.2); border-radius:15px; overflow-y:auto; display:none;">
+                    <div style="margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:15px;">
+                        <span class="prob-tag" style="background:#555; color:white;">User Suggestion</span>
+                        <h2 id="sugTitle" style="margin:10px 0;"></h2>
+                        <div style="color:#aaa; font-size:0.9rem;">
+                            Suggested by <span id="sugAuthor" style="color:var(--purple-main);"></span> 
+                            on <span id="sugDate"></span>
+                        </div>
+                    </div>
+        
+                    <div id="sugDesc" style="color:#ddd; line-height:1.6; margin-bottom:20px;"></div>
+                    
+                    <h4 style="color:#aaa;">Proposed Answer:</h4>
+                    <div id="sugAns" style="background:rgba(255,255,255,0.05); padding:10px; border-radius:5px; margin-bottom:20px; font-family:monospace;"></div>
+        
+                    <h4 style="color:#aaa;">Solution Images:</h4>
+                    <div id="sugImages" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:30px;"></div>
+                    <h4 style="color:#aaa; margin-top:20px;">Discussion</h4>
+                    <div id="sugChatBox" style="background:rgba(0,0,0,0.3); padding:10px; height:200px; overflow-y:auto; border-radius:5px; margin-bottom:10px;"></div>
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="sugChatInput" placeholder="Write a comment to the user..." style="margin-bottom:0;">
+                        <button class="action-btn edit-btn" onclick="sendSugComment()">Send</button>
+                    </div>
+                    <hr style="border-color:rgba(255,255,255,0.1); margin:20px 0;">
+        
+                    <div class="upload-box" style="border-color:var(--green-main);">
+                        <h3>🎓 Author Action</h3>
+                        <p style="color:#aaa; font-size:0.9rem; margin-bottom:15px;">
+                            This problem needs 3 approvals to go live.
+                            <br>Current Approvals: <b id="sugAppCount" style="color:white;">0/3</b>
+                        </p>
+                        <div style="display:flex; gap:10px;">
+                            <input type="number" id="allocScore" placeholder="Allocate Score (e.g. 15)" style="flex:1; margin-bottom:0;">
+                            <button class="btn-primary" onclick="approveSuggestion()" style="width:auto; background:var(--green-main); color:black;">Approve</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -546,6 +594,110 @@
             el.value = el.value.substring(0, start) + symbol + el.value.substring(end);
             el.focus();
         }
+
+        const originalSwitchTab = switchTab;
+        switchTab = function(tab) {
+            originalSwitchTab(tab);
+            if(tab === 'suggestions') loadSuggestions();
+        }
+
+        let currentSugId = null;
+
+        async function loadSuggestions() {
+            try {
+                const res = await fetch('/api/academic/suggestions', { headers: { 'Authorization': `Bearer ${token}` } });
+                const list = await res.json();
+                
+                const container = document.getElementById('suggestionList');
+                if(list.length === 0) {
+                    container.innerHTML = "<p style='text-align:center; color:#666;'>No pending suggestions.</p>";
+                    return;
+                }
+
+                const pending = list.filter(i => i.status === 'pending');
+                if(pending.length > 0) document.getElementById('suggestPing').style.display = 'inline-block';
+
+                container.innerHTML = list.map(s => `
+                    <div class="list-item" onclick="viewSuggestion(${JSON.stringify(s).replace(/"/g, '&quot;')})" style="cursor:pointer; flex-direction:column; align-items:flex-start; gap:5px;">
+                        <div style="font-weight:bold; color:white;">${escapeHtml(s.title)}</div>
+                        <div style="font-size:0.85rem; color:#888;">
+                            By ${s.username} • <span class="status-badge st-${s.status}">${s.status}</span>
+                            • Approvals: ${s.approval_count}/3
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) { console.error(e); }
+        }
+
+        async function viewSuggestion(sObj) {
+        const res = await fetch(`/api/suggestions/${sObj.suggestion_id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const data = await res.json();
+        const s = data.suggestion;
+
+        currentSugId = s.suggestion_id;
+        document.getElementById('suggestionDetail').style.display = 'block';
+            document.getElementById('sugTitle').innerText = s.title;
+            document.getElementById('sugAuthor').innerText = s.username;
+            document.getElementById('sugDate').innerText = new Date(s.created_at).toLocaleDateString();
+            document.getElementById('sugDesc').innerHTML = s.description;
+            document.getElementById('sugAns').innerText = s.answer;
+            document.getElementById('sugAppCount').innerText = `${s.approval_count}/3`;
+        
+            const imgContainer = document.getElementById('sugImages');
+            if(s.solution_images && s.solution_images.length > 0) {
+                imgContainer.innerHTML = s.solution_images.map(url => 
+                    `<a href="${url}" target="_blank"><img src="${url}" style="height:100px; border-radius:5px; border:1px solid rgba(255,255,255,0.2);"></a>`
+                ).join('');
+            } else {
+                imgContainer.innerHTML = "<span style='color:#666; font-style:italic;'>No images provided.</span>";
+            }
+
+        const chatBox = document.getElementById('sugChatBox');
+        chatBox.innerHTML = data.comments.map(c => `
+            <div style="margin-bottom:8px; font-size:0.9rem; padding:5px; background:rgba(255,255,255,0.05); border-radius:4px;">
+                <div style="font-weight:bold; color:${c.username === s.username ? 'var(--purple-main)' : '#aaa'}">${c.username}</div>
+                <div style="color:#ddd;">${c.content}</div>
+            </div>
+        `).join('');
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+        async function approveSuggestion() {
+            if(!currentSugId) return;
+            const score = document.getElementById('allocScore').value;
+            if(!score) return alert("Please allocate a score.");
+
+            if(!confirm(`Approve this problem with a score of ${score}?`)) return;
+
+            try {
+                const res = await fetch(`/api/academic/suggestions/${currentSugId}/approve`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                    body: JSON.stringify({ score: parseInt(score) })
+                });
+                const data = await res.json();
+                
+                if(res.ok) {
+                    alert(data.message);
+                    document.getElementById('suggestionDetail').style.display = 'none';
+                    loadSuggestions();
+                } else {
+                    alert(data.error);
+                }
+            } catch(e) { alert("Error approving"); }
+        }
+        async function sendSugComment() {
+        const txt = document.getElementById('sugChatInput');
+        if(!txt.value) return;
+
+        await fetch(`/api/suggestions/${currentSugId}/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ content: txt.value })
+        });
+        txt.value = "";
+        viewSuggestion({ suggestion_id: currentSugId }); 
+}
     </script>
     <div id="editModal" class="upload-box" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:600px; z-index:1000; box-shadow:0 0 50px rgba(0,0,0,0.8);">
         <h3 style="margin-top:0;">Edit Problem</h3>

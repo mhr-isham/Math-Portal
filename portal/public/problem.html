@@ -128,6 +128,7 @@
         .nav-btn:hover {
             background: var(--purple-main);
             border-color: var(--purple-main);
+            }
     </style>
 </head>
 <body>
@@ -187,6 +188,26 @@
                     p.description = p.description_bn;
                 }
 
+                if (p.userStatus && p.userStatus.isSolvedInContest) {
+                    const titleEl = document.querySelector('.prob-title') || document.getElementById('probTitle');
+                    if (titleEl) {
+                        titleEl.innerHTML += `
+                            <span style="
+                                background: rgba(255, 152, 0, 0.15); 
+                                color: #ff9800; 
+                                border: 1px solid #ff9800; 
+                                font-size: 0.5em; 
+                                padding: 4px 8px; 
+                                border-radius: 12px; 
+                                vertical-align: middle; 
+                                margin-left: 10px;
+                                text-transform: uppercase;
+                                letter-spacing: 0.5px;
+                            ">
+                                🏆 Contest Solved
+                            </span>`;
+                    }
+                }
                 if (p.prevId) {
                     const prevBtn = document.getElementById('prevBtn');
                     prevBtn.href = `/problems/${p.prevId}`;
@@ -284,7 +305,7 @@
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            loadProblem(); // Reload to update UI
+            loadProblem();
         }
         
         async function loadComments() {

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Virtual Contest - NDMC</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
+    <style>
+        .vc-container { max-width: 1000px; margin: 0 auto; padding-top: 50px; }
+        .hero-section {
+            background: linear-gradient(45deg, rgba(120, 111, 239, 0.2), rgba(30, 30, 45, 0.8));
+            border: 1px solid var(--purple-main);
+            border-radius: 15px; padding: 40px; text-align: center; margin-bottom: 40px;
+        }
+        .contest-card { 
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); 
+            padding: 30px; border-radius: 10px; margin-bottom: 15px; text-align: center;
+        }
+        .empty-state { color: #666; font-style: italic; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .empty-icon { font-size: 2rem; opacity: 0.5; }
+        .section-title { 
+            border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; 
+            margin-bottom: 20px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; font-size: 0.9rem; 
+        }
+    </style>
+</head>
+<body>
+    <div class="vc-container">
+        <div class="hero-section">
+            <h1 style="color:white; margin-bottom:10px;">Design Your Own Contest</h1>
+            <p style="color:#ccc; margin-bottom:20px;">Challenge yourself with a custom set of problems. Pick your topics, time, and difficulty.</p>
+            <button class="btn-primary" onclick="window.location.href='/my-contest'" style="width:auto; padding: 12px 30px; font-size: 1.1rem;">
+                Start Custom Contest 🚀
+            </button>
+        </div>
+
+        <div style="display:flex; gap:30px; flex-wrap: wrap;">
+            <div style="flex:2; min-width: 300px;">
+                
+                <h3 class="section-title">🔴 Live Contests</h3>
+                <div class="contest-card" id="liveList">
+                    <div class="empty-state">
+                        <span class="empty-icon">📡</span>
+                        <span>No live contests running at the moment.</span>
+                    </div>
+                </div>
+
+                <h3 class="section-title" style="margin-top:40px;">📅 Upcoming Contests</h3>
+                <div class="contest-card">
+                    <div class="empty-state">
+                        <span class="empty-icon">⏳</span>
+                        <span>No upcoming contests scheduled. Check back later!</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="flex:1; min-width: 250px;">
+                <h3 class="section-title">📜 Past Contests</h3>
+                <div class="contest-card" id="pastList" style="padding: 20px;">
+                    <div class="empty-state" style="font-size: 0.9rem;">
+                        <span>No past contests available in the archive.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const token = localStorage.getItem('authToken');
+        if(!token) window.location.href = '/join';
+    
+        async function loadDashboard() {
+            const liveContainer = document.getElementById('liveList');
+            const pastContainer = document.getElementById('pastList');
+            const upcomingContainer = document.getElementById('upcomingList');
+    
+            try {
+                const res = await fetch('/api/contest/active', { headers: { 'Authorization': `Bearer ${token}` } });
+                const live = await res.json();
+    
+                if(live.length === 0) {
+                    liveContainer.innerHTML = `
+                        <div class="empty-state">
+                            <span class="empty-icon">📡</span>
+                            <span>No live contests running.</span>
+                        </div>`;
+                } else {
+                    liveContainer.innerHTML = live.map(c => {
+                        const elapsed = (Date.now() - new Date(c.start_time)) / 60000;
+                        const limit = parseInt(c.config.timeLimit || c.config.time);
+                        const left = Math.max(0, Math.round(limit - elapsed));
+                        
+                        return `
+                        <div class="contest-card" style="text-align:left; border-left:4px solid var(--green-main);">
+                            <div style="font-weight:bold; color:white; font-size:1.1rem;">Custom Virtual Contest</div>
+                            <div style="color:#aaa; font-size:0.9rem; margin:5px 0;">
+                                ${c.config.categories.join(', ')} • ${left} mins left
+                            </div>
+                            <button class="btn-primary" onclick="window.location.href='/my-contest?resume=${c.contest_id}'" style="padding:5px 15px; width:auto; font-size:0.9rem;">
+                                Resume ➡
+                            </button>
+                        </div>`;
+                    }).join('');
+                }
+            } catch(e) { console.error(e); }
+    
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                const res = await fetch(`/api/contest/history/${payload.userId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const past = await res.json();
+    
+                if(past.length === 0) {
+                    pastContainer.innerHTML = `
+                        <div class="empty-state" style="font-size: 0.9rem;">
+                            <span>No past contests available.</span>
+                        </div>`;
+                } else {
+                    pastContainer.innerHTML = past.map(c => {
+                        const date = new Date(c.start_time).toLocaleDateString();
+                    
+                        let scoreText = `Score: ${parseFloat(c.score_obtained || 0).toFixed(2)}`;
+                        let action = `window.location.href='/contest-history.html?id=${c.public_id}'`;
+                        let statusColor = "var(--purple-main)";
+                        
+                        if (c.needs_finalization) {
+                            scoreText = "⚠ Expired - Click to Finalize";
+                            statusColor = "#ff9800";
+                            action = `window.location.href='/my-contest?resume=${c.contest_id}'`; 
+                        }
+
+                        return `
+                        <div class="contest-card" style="padding:15px; text-align:left; cursor:pointer;" onclick="${action}">
+                            <div style="color:white; font-weight:bold;">Custom Contest (${date})</div>
+                            <div style="color:${statusColor}; font-size:0.9rem;">${scoreText}</div>
+                        </div>`;
+                    }).join('');
+                }
+            } catch(e) { console.error(e); }
+        }
+    
+        window.onload = loadDashboard;
+    </script>
+</body>
+</html>

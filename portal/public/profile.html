@@ -83,6 +83,21 @@
                 <button type="submit" class="delete-btn" style="width:100%; padding:10px;">Update Password</button>
             </form>
         </div>
+        <div class="upload-box" style="margin-top:30px; border-color: var(--green-main);">
+            <h3>My Connections</h3>
+            
+            <h4 style="color:#aaa; margin-top:20px;">Pending Requests</h4>
+            <div id="pendingList" style="margin-bottom:20px;"></div>
+        
+            <h4 style="color:#aaa;">My Friends</h4>
+            <div id="friendsList"></div>
+        </div>
+        <div class="upload-box" style="margin-top:30px; border-color: #ff9800;">
+            <h3>Contest History</h3>
+            <div id="contestList" style="margin-top:15px;">
+                <p style="color:#aaa;">Loading...</p>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -100,11 +115,73 @@
             if(u.study_level) document.getElementById('pLevel').value = u.study_level;
             if(u.date_of_birth) document.getElementById('pDob').value = u.date_of_birth.split('T')[0];
             if(u.profile_pic_url) document.getElementById('profilePreview').src = u.profile_pic_url;
-            if(u.twitter_url) document.getElementById('pGithub').value = u.twitter_url;
-            if(u.instagram_url) document.getElementById('pLinkedin').value = u.instagram_url;
+            if(u.twitter_url) document.getElementById('pTwitter').value = u.twitter_url;
+            if(u.instagram_url) document.getElementById('pInstagram').value = u.instagram_url;
             if(u.facebook_url) document.getElementById('pFacebook').value = u.facebook_url;
             if(u.website_url) document.getElementById('pWebsite').value = u.website_url;
-        };
+
+        loadMyFriends(); 
+        loadContests();
+
+};
+
+        async function loadMyFriends() {
+            const listP = document.getElementById('pendingList');
+            const listF = document.getElementById('friendsList');
+            listP.innerHTML = "<p>Loading...</p>";
+            
+            try {
+                const res = await fetch('/api/my-friends', { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await res.json();
+
+                if (data.requests.length === 0) listP.innerHTML = "<p style='color:#666; font-style:italic;'>No pending requests.</p>";
+                else {
+                    listP.innerHTML = data.requests.map(u => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-bottom:10px;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <img src="${u.profile_pic_url || '/default-avatar.png'}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">
+                                <div>
+                                    <div style="font-weight:bold;"><a href="/u/${u.username}" style="color:white; text-decoration:none;">${u.full_name}</a></div>
+                                    <div style="font-size:0.8rem; color:#aaa;">@${u.username}</div>
+                                </div>
+                            </div>
+                            <div>
+                                <button class="action-btn" style="background:var(--green-main); color:black;" onclick="respondFriend('${u.user_id}', 'accept')">Accept</button>
+                                <button class="action-btn" style="background:#d32f2f;" onclick="respondFriend('${u.user_id}', 'reject')">Reject</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                if (data.friends.length === 0) listF.innerHTML = "<p style='color:#666; font-style:italic;'>No friends added yet.</p>";
+                else {
+                    listF.innerHTML = data.friends.map(u => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-bottom:10px;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <img src="${u.profile_pic_url || '/default-avatar.png'}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">
+                                <div>
+                                    <div style="font-weight:bold;"><a href="/u/${u.username}" style="color:white; text-decoration:none;">${u.full_name}</a></div>
+                                    <div style="font-size:0.8rem; color:#aaa;">@${u.username}</div>
+                                </div>
+                            </div>
+                            <button class="action-btn" style="background:transparent; border:1px solid #d32f2f; color:#d32f2f;" onclick="respondFriend('${u.user_id}', 'remove')">Remove</button>
+                        </div>
+                    `).join('');
+                }
+
+            } catch (e) { console.error(e); }
+        }
+
+        async function respondFriend(id, action) {
+            let url = `/api/friends/${id}`;
+            let method = 'DELETE';
+
+            if (action === 'accept') { url = `/api/friends/accept/${id}`; method = 'POST'; }
+            if (action === 'remove' && !confirm("Remove this friend?")) return;
+
+            await fetch(url, { method, headers: { 'Authorization': `Bearer ${token}` } });
+            loadMyFriends();
+        }
 
         async function uploadPhoto() {
             const file = document.getElementById('photoInput').files[0];
@@ -149,23 +226,80 @@
             if(res.ok) alert("Profile Saved!");
         }
 
-        async function changePass(e) {
-            e.preventDefault();
-            const p1 = document.getElementById('newPass').value;
-            const p2 = document.getElementById('confirmPass').value;
-            if(p1 !== p2) return alert("Passwords do not match");
+        async function loadContests() {
+        const container = document.getElementById('contestList');
+        if (!container) return;
 
-            const res = await fetch('/api/profile/change-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ 
-                    oldPass: document.getElementById('oldPass').value,
-                    newPass: p1 
-                })
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const myId = payload.userId;
+
+            const res = await fetch(`/api/contest/history/${myId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-            const data = await res.json();
-            alert(data.message || data.error);
+            const contests = await res.json();
+            
+            if (contests.length === 0) {
+                container.innerHTML = "<p style='color:#666; font-style:italic;'>You haven't participated in any contests yet.</p>";
+                return;
+            }
+
+            container.innerHTML = contests.map(c => {
+                const dateObj = new Date(c.start_time);
+                const dateStr = dateObj.toLocaleDateString();
+                const title = `Custom Virtual Contest ${dateStr}`;
+                
+                const total = c.total_questions || 0;
+                const correct = c.correct_count || 0;
+                const acc = total > 0 ? Math.round((correct / total) * 100) : 0;
+                const accColor = acc >= 80 ? 'var(--green-main)' : (acc >= 50 ? '#ff9800' : 'var(--red-main)');
+
+                const link = c.public_id ? `/contest-history.html?id=${c.public_id}` : '#';
+                const cursorStyle = c.public_id ? 'pointer' : 'default';
+
+                return `
+                <div class="list-item" onclick="window.location.href='${link}'" style="cursor:${cursorStyle}; display:block; margin-bottom:10px; background:rgba(255,255,255,0.03); transition:0.2s;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-weight:bold; color:white; font-size:1.05rem;">${title}</div>
+                            <div style="font-size:0.85rem; color:#aaa; margin-top:4px;">
+                                Accuracy: <span style="color:${accColor}; font-weight:bold;">${acc}%</span> 
+                                (${correct}/${total})
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:bold; color:var(--purple-main); font-size:1.1rem;">
+                                ${parseFloat(c.score_obtained).toFixed(2)} Pts
+                            </div>
+                            <div style="font-size:0.7rem; color:#666; margin-top:5px;">Click to view</div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = "<p style='color:red;'>Failed to load history.</p>";
         }
+}
+
+    async function toggleContestVisibility(id, currentStatus, btn) {
+        const newStatus = !currentStatus;
+        btn.innerText = "Updating...";
+        try {
+            const res = await fetch(`/api/contest/${id}/visibility`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ isPublic: newStatus })
+            });
+            if (res.ok) {
+                btn.innerText = newStatus ? 'Public' : 'Private';
+                btn.style.background = newStatus ? 'var(--green-main)' : 'transparent';
+                btn.style.borderColor = newStatus ? 'var(--green-main)' : '#555';
+                btn.style.color = newStatus ? 'black' : '#aaa';
+                btn.onclick = () => toggleContestVisibility(id, newStatus, btn);
+            }
+        } catch (e) { btn.innerText = currentStatus ? 'Public' : 'Private'; }
+    }
     </script>
 </body>
 </html>

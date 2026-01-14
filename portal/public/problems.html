@@ -189,7 +189,8 @@
                     const ratio = p.unique_attempts > 0 ? ((p.solve_count / p.unique_attempts) * 100).toFixed(0) + '%' : '0%';
                     const netVotes = p.upvote_count - p.downvote_count;
                     const solvedClass = p.is_solved ? 'solved' : '';
-
+                    const solvedInContest = p.is_contest_solved;
+                    const contestTag = solvedInContest ? '<span style="color:#ff9800; font-size:0.7rem; border:1px solid #ff9800; padding:2px 4px; border-radius:4px; margin-left:5px;">🏆 Contest</span>' : '';
                     const initial = p.initial_score;
                     const potential = p.user_potential_score;
                     const bookmarkIcon = p.is_bookmarked ? '🔖' : '';
@@ -244,6 +245,27 @@
     }
         
         if(token) loadProblems();
+        (async function checkContributor() {
+        if(!token) return;
+        try {
+            const res = await fetch('/api/profile/me', { headers: { 'Authorization': `Bearer ${token}` } });
+            const user = await res.json();
+            
+            if (user.can_suggest) {
+                const filterBar = document.querySelector('.filter-bar');
+                const suggestBox = `
+                    <div style="margin: 0 0 20px 0; padding: 20px; background: linear-gradient(45deg, rgba(120, 111, 239, 0.1), rgba(120, 111, 239, 0.05)); border: 1px solid var(--purple-main); border-radius: 12px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 4px 15px rgba(120, 111, 239, 0.1);">
+                        <div>
+                            <h3 style="margin:0 0 5px 0; color:white; font-size:1.1rem;">💡 You are a Contributor!</h3>
+                            <div style="color:#aaa; font-size:0.9rem;">You have solved 10+ problems. Help the community by suggesting a new problem.</div>
+                        </div>
+                        <button class="btn-primary" onclick="window.location.href='/suggest'" style="padding:10px 25px; box-shadow:0 4px 10px rgba(120, 111, 239, 0.3);">Suggest Problem</button>
+                    </div>
+                `;
+                filterBar.insertAdjacentHTML('beforebegin', suggestBox);
+            }
+        } catch(e) { console.error(e); }
+    })();
     </script>
 </body>
 </html>

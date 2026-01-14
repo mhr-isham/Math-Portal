@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Suggest a Problem - NDMC</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
+    <script> window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } }; </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        .container { max-width: 800px; margin: 0 auto; padding-top: 50px; }
+        .card { background: rgba(30, 30, 45, 0.8); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 15px; margin-bottom: 30px; }
+        input, textarea { width: 100%; padding: 12px; margin-bottom: 15px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 5px; }
+        
+        .math-toolbar { display: flex; gap: 10px; margin-bottom: 10px; }
+        .math-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 5px 10px; cursor: pointer; border-radius: 5px; }
+        .math-btn:hover { background: var(--purple-main); }
+        
+        .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; }
+        .pending { background: #ff9800; color: black; }
+        .approved { background: var(--green-main); color: black; }
+        .rejected { background: var(--red-main); color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="margin-bottom:10px;">Suggest a Problem</h2>
+    <p style="color:#aaa; margin-bottom:30px;">Contribute to the NDMC archive. Your problem will be reviewed by 3 authors.</p>
+
+    <div class="card">
+        <form onsubmit="submitSuggestion(event)">
+            <label>Problem Title</label>
+            <input type="text" id="sTitle" required placeholder="e.g. Determine the radius...">
+
+            <label>Description (LaTeX Supported)</label>
+            <div class="math-toolbar">
+                <button type="button" class="math-btn" onclick="insertMath('$...$')">$ x $</button>
+                <button type="button" class="math-btn" onclick="insertMath('$$...$$')">$$ x $$</button>
+                <button type="button" class="math-btn" onclick="insertMath('\\frac{a}{b}')">a/b</button>
+            </div>
+            <textarea id="sDesc" rows="6" required placeholder="Type the full problem statement here..."></textarea>
+
+            <label>Numerical Answer</label>
+            <input type="text" id="sAns" required placeholder="e.g. 42 or 3.1416">
+
+            <label>Solution / Proof Images (Max 10)</label>
+            <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:10px; border:1px dashed #666; text-align:center;">
+                <input type="file" id="sFiles" multiple accept="image/*" style="display:none;" onchange="updateFileCount()">
+                <button type="button" class="btn-primary" onclick="document.getElementById('sFiles').click()" style="width:auto;">Select Images</button>
+                <p id="fileCount" style="color:#aaa; font-size:0.9rem; margin-top:10px;">No files selected</p>
+            </div>
+
+            <button type="submit" class="btn-primary" style="margin-top:20px;">Submit for Review</button>
+        </form>
+    </div>
+
+    <h3 style="margin-bottom:15px;">Your Suggestions</h3>
+    <div id="mySuggestions"></div>
+</div>
+<div id="detailModal" class="card" style="display:none; position:fixed; top:5%; left:5%; width:90%; height:90%; z-index:1000; overflow-y:auto; border:1px solid var(--purple-main); box-shadow:0 0 50px black;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+        <h2 id="mTitle">Title</h2>
+        <button class="btn-primary" onclick="closeModal()" style="width:auto; background:#555;">Close</button>
+    </div>
+
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:300px;">
+            <input type="hidden" id="mId">
+            <label>Title</label>
+            <input type="text" id="mTitleInput">
+            <label>Description</label>
+            <textarea id="mDescInput" rows="5"></textarea>
+            <label>Answer</label>
+            <input type="text" id="mAnsInput">
+            <button class="btn-primary" onclick="saveEdit()" id="mSaveBtn">Save Changes</button>
+        </div>
+
+        <div style="flex:1; min-width:300px; display:flex; flex-direction:column;">
+            <h3>Discussion</h3>
+            <div id="mChat" style="flex:1; background:rgba(0,0,0,0.3); border-radius:10px; padding:15px; height:300px; overflow-y:auto; margin-bottom:10px; border:1px solid rgba(255,255,255,0.1);"></div>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="mChatInput" placeholder="Type a comment..." style="margin-bottom:0;">
+                <button class="btn-primary" onclick="sendComment()" style="width:auto;">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const token = localStorage.getItem('authToken');
+    if(!token) window.location.href = '/join';
+    (async () => {
+        try {
+            const res = await fetch('/api/profile/me', { headers: { 'Authorization': `Bearer ${token}` } });
+            const user = await res.json();
+            if(!user.can_suggest) {
+                alert("You do not have permission to access this page.");
+                window.location.href = '/problems';
+            }
+            loadMySuggestions();
+        } catch(e) { window.location.href = '/problems'; }
+    })();
+
+    function insertMath(symbol) {
+        const el = document.getElementById('sDesc');
+        const [start, end] = [el.selectionStart, el.selectionEnd];
+        el.value = el.value.substring(0, start) + symbol + el.value.substring(end);
+        el.focus();
+    }
+
+    function updateFileCount() {
+        const count = document.getElementById('sFiles').files.length;
+        document.getElementById('fileCount').innerText = count > 0 ? `${count} files selected` : "No files selected";
+    }
+
+    async function submitSuggestion(e) {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        btn.innerText = "Uploading...";
+        btn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('title', document.getElementById('sTitle').value);
+        formData.append('description', document.getElementById('sDesc').value);
+        formData.append('answer', document.getElementById('sAns').value);
+        
+        const files = document.getElementById('sFiles').files;
+        for(let i=0; i<files.length; i++) {
+            formData.append('solutions', files[i]);
+        }
+
+        try {
+            const res = await fetch('/api/suggest', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            const data = await res.json();
+            
+            if(res.ok) {
+                alert("Suggestion Submitted Successfully!");
+                e.target.reset();
+                document.getElementById('fileCount').innerText = "No files selected";
+                loadMySuggestions();
+            } else {
+                alert(data.error || "Submission failed");
+            }
+        } catch(err) {
+            alert("Network Error");
+        } finally {
+            btn.innerText = "Submit for Review";
+            btn.disabled = false;
+        }
+    }
+
+    async function loadMySuggestions() {
+
+        const container = document.getElementById('mySuggestions');
+        container.innerHTML = "<p style='color:#666;'>Loading...</p>";
+        
+
+        const res = await fetch('/api/my-suggestions', { headers: { 'Authorization': `Bearer ${token}` } });
+        const list = await res.json();
+        container.innerHTML = list.map(s => `
+        <div onclick="openSuggestion(${s.suggestion_id})"style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-weight:bold; color:white;">${s.title}</div>
+                    <div style="font-size:0.85rem; color:#aaa;">${new Date(s.created_at).toLocaleDateString()}</div>
+                </div>
+                <span class="status-badge ${s.status}">${s.status}</span>
+            </div>
+        `).join('');
+    }
+    async function openSuggestion(id) {
+    document.getElementById('detailModal').style.display = 'block';
+    document.getElementById('mId').value = id;
+    
+    const res = await fetch(`/api/suggestions/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const data = await res.json();
+    
+    const s = data.suggestion;
+    document.getElementById('mTitle').innerText = s.title;
+    
+    document.getElementById('mTitleInput').value = s.title;
+    document.getElementById('mDescInput').value = s.description;
+    document.getElementById('mAnsInput').value = s.answer;
+
+    const isPending = s.status === 'pending';
+    document.getElementById('mTitleInput').disabled = !isPending;
+    document.getElementById('mDescInput').disabled = !isPending;
+    document.getElementById('mAnsInput').disabled = !isPending;
+    document.getElementById('mSaveBtn').style.display = isPending ? 'block' : 'none';
+
+    renderChat(data.comments);
+}
+
+function renderChat(comments) {
+    const box = document.getElementById('mChat');
+    if(comments.length === 0) { box.innerHTML = "<p style='color:#aaa;'>No comments yet.</p>"; return; }
+    
+    box.innerHTML = comments.map(c => `
+        <div style="margin-bottom:10px; font-size:0.9rem;">
+            <span style="color:${c.username === '${user.username}' ? 'var(--purple-main)' : '#aaa'}; font-weight:bold;">${c.username}</span>:
+            <span style="color:white;">${c.content}</span>
+            <div style="font-size:0.7rem; color:#666;">${new Date(c.created_at).toLocaleString()}</div>
+        </div>
+    `).join('');
+    box.scrollTop = box.scrollHeight;
+}
+
+async function sendComment() {
+    const id = document.getElementById('mId').value;
+    const txt = document.getElementById('mChatInput');
+    if(!txt.value) return;
+
+    await fetch(`/api/suggestions/${id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ content: txt.value })
+    });
+    txt.value = "";
+    openSuggestion(id);
+}
+
+async function saveEdit() {
+    const id = document.getElementById('mId').value;
+    const formData = new FormData();
+    formData.append('title', document.getElementById('mTitleInput').value);
+    formData.append('description', document.getElementById('mDescInput').value);
+    formData.append('answer', document.getElementById('mAnsInput').value);
+
+    await fetch(`/api/suggestions/${id}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+    });
+    alert("Updated!");
+    loadMySuggestions();
+}
+
+function closeModal() { document.getElementById('detailModal').style.display = 'none'; }
+    
+</script>
+
+</body>
+</html>

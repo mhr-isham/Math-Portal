@@ -108,14 +108,14 @@
     <div class="profile-container">
         <div id="profileContent" style="display:none;">
             <div class="profile-card">
-                <img id="uPic" class="p-avatar" src="" onerror="this.src='https://via.placeholder.com/150?text=?'">
+                <img id="uPic" class="p-avatar" src="" onerror="this.src='https://portal.ndmcbd.org/uploads/avatar.png'">
                 
                 <h1 id="uName" class="p-name"></h1>
                 <span id="uUser" class="p-user"></span>
                 <div id="uMemberSince" style="font-size:0.85rem; color:#666; margin-bottom:10px;"></div>
 
                 <div id="uSocials" class="social-links"></div>
-
+                <div id="friendActionBox" style="margin: 15px 0;"></div>
                 <div class="p-stats">
                     <div class="stat-box">
                         <h3 id="uRank">-</h3>
@@ -192,15 +192,34 @@
             } catch (e) { console.error("Activity load failed", e); }
         }
 
+        async function updateFriend(action, id) {
+        const token = localStorage.getItem('authToken');
+        let url = `/api/friends/request/${id}`;
+        let method = 'POST';
+
+        if (action === 'accept') url = `/api/friends/accept/${id}`;
+        if (action === 'remove') { url = `/api/friends/${id}`; method = 'DELETE'; }
+
+        if (action === 'remove' && !confirm("Are you sure?")) return;
+
+        try {
+            const res = await fetch(url, { method, headers: { 'Authorization': `Bearer ${token}` } });
+            if (res.ok) {
+                loadProfile();
+            } else {
+                alert("Action failed");
+            }
+        } catch (e) { alert("Network Error"); }
+    }
+
         async function loadProfile() {
+            const token = localStorage.getItem('authToken');
             const username = window.location.pathname.split('/').pop();
             try {
                 const res = await fetch(`/api/users/${username}`);
                 if (!res.ok) throw new Error("User not found");
                 
                 const user = await res.json();
-
-                // Basic Info
                 document.getElementById('uPic').src = user.profile_pic_url || "https://via.placeholder.com/150?text=?";
                 document.getElementById('uName').innerText = user.full_name;
                 document.getElementById('uUser').innerText = '@' + user.username;
@@ -210,13 +229,17 @@
 
                 const socials = document.getElementById('uSocials');
                 socials.innerHTML = '';
-                if(user.twitter_url) socials.innerHTML += `<a href="${user.twitter_url}" target="_blank" class="social-btn" title="X">X</a>`;
-                if(user.instagram_url) socials.innerHTML += `<a href="${user.instagram_url}" target="_blank" class="social-btn" title="Instagram">Insta</a>`;
-                if(user.facebook_url) socials.innerHTML += `<a href="${user.facebook_url}" target="_blank" class="social-btn" title="Facebook">FB</a>`;
-                if(user.website_url) socials.innerHTML += `<a href="${user.website_url}" target="_blank" class="social-btn" title="Website">🌐</a>`;
-                
+                const formatUrl = (url) => {
+                if (!url) return "";
+                return (url.startsWith('http://') || url.startsWith('https://')) ? url : 'https://' + url;
+                };
+
+                if(user.twitter_url) socials.innerHTML += `<a href="${formatUrl(user.twitter_url)}" target="_blank" class="social-btn" title="X">X</a>`;
+                if(user.instagram_url) socials.innerHTML += `<a href="${formatUrl(user.instagram_url)}" target="_blank" class="social-btn" title="Instagram">Insta</a>`;
+                if(user.facebook_url) socials.innerHTML += `<a href="${formatUrl(user.facebook_url)}" target="_blank" class="social-btn" title="Facebook">FB</a>`;
+                if(user.website_url) socials.innerHTML += `<a href="${formatUrl(user.website_url)}" target="_blank" class="social-btn" title="Website">🌐</a>`;
                 document.getElementById('uRank').innerText = '#' + user.rank;
-                document.getElementById('uRating').innerText = parseFloat(user.current_rating).toFixed(0);
+                document.getElementById('uRating').innerText = parseFloat(user.current_rating).toFixed(5);
                 document.getElementById('uBio').innerText = user.short_bio || "No bio available.";
                 
                 const instEl = document.getElementById('uInst');
@@ -246,8 +269,8 @@
                 if(user.authored_problems.length > 0) {
                     document.getElementById('authoredSection').style.display = 'block';
                     document.getElementById('authoredList').innerHTML = user.authored_problems.map(p => `
-                        <div class="list-item">
-                            <a href="/problems/${p.problem_id}" class="item-title">${p.title}</a>
+                        <div class="list-item" onclick="window.location.href='/problems/${p.problem_id}'" style="cursor:pointer;">
+                            <div class="item-title" style="font-weight:bold; color:var(--purple-main);">${p.title}</div>
                             <span class="item-meta">👍 ${p.upvote_count}</span>
                         </div>
                     `).join('');
@@ -264,6 +287,30 @@
                         </div>
                     `).join('');
                 }
+
+                const friendBox = document.getElementById('friendActionBox');
+                try {
+                    const fRes = await fetch(`/api/friends/status/${username}`, { 
+                        headers: { 'Authorization': `Bearer ${token}` } 
+                    });
+                    const fData = await fRes.json();
+                    
+                    if (fData.status !== 'self') {
+                        let btnHtml = '';
+                        if (fData.status === 'none') {
+                            btnHtml = `<button onclick="updateFriend('add', '${fData.targetId}')" class="btn-primary" style="background:var(--purple-main);">Add Friend</button>`;
+                        } else if (fData.status === 'pending_sent') {
+                            btnHtml = `<button class="btn-primary" style="background:#555; cursor:default;">Request Pending</button> 
+                                    <button onclick="updateFriend('remove', '${fData.targetId}')" class="vote-btn" style="margin-left:5px; color:#ff6b6b;">Cancel</button>`;
+                        } else if (fData.status === 'pending_received') {
+                            btnHtml = `<button onclick="updateFriend('accept', '${fData.targetId}')" class="btn-primary" style="background:var(--green-main); color:black;">Accept Request</button>
+                                    <button onclick="updateFriend('remove', '${fData.targetId}')" class="vote-btn" style="margin-left:5px; color:#ff6b6b;">Reject</button>`;
+                        } else if (fData.status === 'friends') {
+                            btnHtml = `<button onclick="updateFriend('remove', '${fData.targetId}')" class="btn-primary" style="background:transparent; border:1px solid #ff6b6b; color:#ff6b6b;">Remove Friend</button>`;
+                        }
+                        friendBox.innerHTML = btnHtml;
+                    }
+                } catch(e) { console.error("Friend status check failed", e); }
 
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('profileContent').style.display = 'block';

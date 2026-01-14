@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Contest - NDMC</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <script src="/js/header.js"></script>
+    <script> window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } }; </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .setup-container { max-width: 800px; margin: 120px auto 50px auto; background: rgba(30,30,45,0.8); padding: 30px; border-radius: 15px; border: 1px solid var(--purple-main); }
+        .contest-ui { display: none; max-width: 900px; margin: 120px auto 50px auto;; }
+        
+        .timer-box { 
+            position: fixed;
+            top: 100px; 
+            right: 20px; background: #d32f2f; color: white; 
+            padding: 10px 20px; border-radius: 30px; font-weight: bold; 
+            display: inline-block; box-shadow: 0 5px 15px rgba(211, 47, 47, 0.4);
+            z-index: 1000;
+            display: none;
+        }
+
+        .prob-box {
+            background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;
+            border: 1px solid transparent; transition: 0.3s;
+        }
+        
+        .prob-box.correct { border-color: var(--green-main); background: rgba(33, 232, 42, 0.05); }
+        .prob-box.wrong { border-color: var(--red-main); background: rgba(211, 47, 47, 0.05); }
+        
+        .cat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .cat-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .cat-box:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .cat-box.selected {
+            border-color: var(--green-main);
+            background: rgba(33, 232, 42, 0.1);
+            box-shadow: 0 0 15px rgba(33, 232, 42, 0.2);
+        }
+
+        .cat-box.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            filter: grayscale(1);
+        }
+
+        .cat-icon { font-size: 2rem; }
+        .cat-label { font-weight: bold; font-size: 1rem; color: #eee; }
+
+        .sub-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+
+        .sub-card {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .sub-card:hover { background: rgba(255,255,255,0.05); }
+        
+        .sub-card input[type="checkbox"] {
+            accent-color: var(--purple-main);
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .result-grid-item {
+            padding: 15px; border-radius: 8px; 
+            display: flex; align-items: center; gap: 10px; text-align: left;
+            cursor: default;
+        }
+    </style>
+</head>
+<body>
+    <div id="timerDisplay" class="timer-box">00:00</div>
+
+    <div id="setupForm" class="setup-container">
+        <h2 style="text-align:center; margin-bottom:30px;">Configure Contest</h2>
+        
+        <label style="font-size: 1.1rem; color: #aaa; margin-bottom: 15px; display: block;">Select Categories</label>
+        <div class="cat-grid" id="categoryGrid"></div>
+
+        <div id="subSection" style="display:none; animation: fadeIn 0.3s;">
+            <label style="font-size: 1.1rem; color: #aaa; margin-bottom: 10px; display: block;">Subcategories</label>
+            <div class="sub-grid" id="subGrid"></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
+            <div>
+                <label>Problem Count (Max 10)</label>
+                <input type="number" id="cCount" value="5" max="10" min="1" style="width:100%; padding:12px; background:rgba(0,0,0,0.3); border:1px solid #444; color:white; border-radius:8px;">
+            </div>
+            <div>
+                <label>Time (Max 60 Mins)</label>
+                <input type="number" id="cTime" value="30" max="60" min="5" style="width:100%; padding:12px; background:rgba(0,0,0,0.3); border:1px solid #444; color:white; border-radius:8px;">
+            </div>
+        </div>
+
+        <button class="btn-primary" onclick="startContest(false)" style="margin-top: 30px; padding: 15px; font-size: 1.1rem;">Start Challenge 🚀</button>
+    </div>
+
+<div id="contestUI" class="contest-ui">
+    <div style="margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h2>Virtual Contest</h2>
+        </div>
+        <div style="background:rgba(255, 152, 0, 0.1); border-left:4px solid #ff9800; padding:10px; color:#ff9800; margin-top:10px;">
+            ⚠️ <b>Instructions:</b> You must click "Submit" for each answer. You have <b>3 attempts</b> per question. Unsubmitted answers will be marked wrong.
+        </div>
+    </div>
+    
+    <div id="questionsContainer"></div>
+    
+    <button id="endBtn" class="btn-primary" onclick="finishContest()" style="background:var(--red-main); margin-top:30px;">End Contest Now</button>
+</div>
+
+<div id="summaryUI" class="setup-container" style="display:none; text-align:center; max-width:600px;">
+    <h2 style="margin-bottom:20px;">Contest Summary</h2>
+    
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+        <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px;">
+            <div style="font-size:0.9rem; color:#aaa;">Total Questions</div>
+            <div id="sumTotal" style="font-size:1.5rem; font-weight:bold;">-</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px;">
+            <div style="font-size:0.9rem; color:#aaa;">Score</div>
+            <div id="sumScore" style="font-size:1.5rem; font-weight:bold; color:var(--purple-main);">-</div>
+        </div>
+        <div style="background:rgba(33, 232, 42, 0.1); padding:15px; border-radius:10px; border:1px solid var(--green-main);">
+            <div style="font-size:0.9rem; color:#aaa;">Correct</div>
+            <div id="sumCorrect" style="font-size:1.5rem; font-weight:bold; color:var(--green-main);">-</div>
+        </div>
+        <div style="background:rgba(211, 47, 47, 0.1); padding:15px; border-radius:10px; border:1px solid var(--red-main);">
+            <div style="font-size:0.9rem; color:#aaa;">Incorrect</div>
+            <div id="sumWrong" style="font-size:1.5rem; font-weight:bold; color:var(--red-main);">-</div>
+        </div>
+    </div>
+
+    <div style="margin-bottom:20px; color:#ccc;">
+        Accuracy: <span id="sumAcc" style="font-weight:bold; color:white;">-</span>
+    </div>
+
+    <button id="viewOverviewBtn" class="btn-primary" style="width:100%; padding:15px; font-size:1.1rem;">View Detailed Overview →</button>
+</div>
+
+<script>
+    const token = localStorage.getItem('authToken');
+    if(!token) window.location.href = '/join';
+
+        const CATEGORIES = [
+            { id: 'Random', name: 'Random (All)', icon: '🎲' },
+            { id: 'Algebra', name: 'Algebra', icon: '➗' },
+            { id: 'Geometry', name: 'Geometry', icon: '📐' },
+            { id: 'Number Theory', name: 'Number Theory', icon: '🔢' },
+            { id: 'Combinatorics', name: 'Combinatorics', icon: '📊' },
+            { id: 'Others', name: 'Others', icon: '🧮' }
+        ];
+
+        const SUB_CATS = {
+            'Algebra': ['Function', 'Polynomial', 'Inequality'],
+            'Combinatorics': ['Counting', 'Probability', 'Graph Theory'],
+            'Number Theory': [], 'Geometry': [], 'Others': ['Physics', 'Astronomy', 'Calculus']
+        };
+
+        let selectedCats = new Set(['Random']);
+        let currentContestId = null;
+        let timerInterval;
+        let startTime;
+
+        window.onload = async () => {
+            renderCategories();
+            const urlParams = new URLSearchParams(window.location.search);
+            const resumeId = urlParams.get('resume');
+
+            if (resumeId) {
+                await resumeContest(resumeId);
+            }
+        };
+
+        async function resumeContest(id) {
+        try {
+            const res = await fetch(`/api/contest/restore/${id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+
+            if (res.status === 404) {
+                alert("Contest not found.");
+                window.location.href = '/vcontest';
+                return;
+            }
+
+            if (data.status === 'finished') {
+                alert("This contest has already ended.");
+                window.location.href = `/contest-history.html?id=${data.publicId}`;
+                return;
+            }
+
+            document.getElementById('setupForm').style.display = 'none';
+            document.getElementById('contestUI').style.display = 'block';
+            document.getElementById('timerDisplay').style.display = 'inline-block';
+            
+            currentContestId = data.contestId;
+            renderQuestions(data.problems);
+            data.submissions.forEach(sub => {
+                const input = document.getElementById(`ans-${sub.problem_id}`);
+                if(input) {
+                    input.value = sub.user_answer;
+                }
+            });
+
+            const startTimeMs = new Date(data.startTime).getTime();
+            const limitMins = parseInt(data.config.timeLimit || data.config.time);
+            const elapsedSecs = (Date.now() - startTimeMs) / 1000;
+            const totalSecs = limitMins * 60;
+            const remainingSecs = Math.max(0, Math.floor(totalSecs - elapsedSecs));
+
+            if (remainingSecs <= 0) {
+                finishContest();
+            } else {
+                startTimer(remainingSecs);
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("Failed to resume contest.");
+        }
+    }
+
+        function renderCategories() {
+            const grid = document.getElementById('categoryGrid');
+            if(!grid) return;
+            const isRandom = selectedCats.has('Random');
+
+            grid.innerHTML = CATEGORIES.map(cat => {
+                const isSelected = selectedCats.has(cat.id);
+                const isDisabled = isRandom && cat.id !== 'Random';
+                
+                return `
+                <div class="cat-box ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}" 
+                     onclick="toggleCategory('${cat.id}')">
+                    <div class="cat-icon">${cat.icon}</div>
+                    <div class="cat-label">${cat.name}</div>
+                </div>`;
+            }).join('');
+            
+            renderSubcategories();
+        }
+
+        function toggleCategory(id) {
+            if (id === 'Random') {
+                if (selectedCats.has('Random')) {
+                    selectedCats.delete('Random');
+                } else {
+                    selectedCats.clear();
+                    selectedCats.add('Random'); 
+                }
+            } else {
+                if (selectedCats.has('Random')) return;
+                
+                if (selectedCats.has(id)) selectedCats.delete(id);
+                else selectedCats.add(id);
+            }
+            renderCategories();
+        }
+
+        function renderSubcategories() {
+            const container = document.getElementById('subSection');
+            const grid = document.getElementById('subGrid');
+            
+            let availableSubs = [];
+            selectedCats.forEach(cat => {
+                if(SUB_CATS[cat]) {
+                    availableSubs = [...availableSubs, ...SUB_CATS[cat]];
+                }
+            });
+
+            if (availableSubs.length === 0 || selectedCats.has('Random')) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            availableSubs = [...new Set(availableSubs)];
+
+            grid.innerHTML = availableSubs.map(sub => `
+                <label class="sub-card">
+                    <input type="checkbox" value="${sub}" name="subcat">
+                    <span>${sub}</span>
+                </label>
+            `).join('');
+        }
+        async function startContest(forceFallback) {
+            const count = parseInt(document.getElementById('cCount').value);
+            const time = parseInt(document.getElementById('cTime').value);
+
+            if (count > 10 || count < 1) return alert("Problem count must be between 1 and 10");
+            if (time > 60 || time < 5) return alert("Time must be between 5 and 60 minutes");
+            if (selectedCats.size === 0) return alert("Please select at least one category");
+            const cats = Array.from(selectedCats);
+            
+            const subInputs = document.querySelectorAll('input[name="subcat"]:checked');
+            const subcats = Array.from(subInputs).map(i => i.value);
+            try {
+                const res = await fetch('/api/contest/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ categories: cats, subcategories: subcats, count, time, allowFallback: forceFallback })
+                });
+                const data = await res.json();
+
+                if (data.status === 'confirm') {
+                    if (confirm(data.message + "\n\nDo you want to proceed with these problems?")) {
+                        startContest(true);
+                    }
+                } else if (data.status === 'started') {
+                    document.getElementById('setupForm').style.display = 'none';
+                    document.getElementById('contestUI').style.display = 'block';
+                    currentContestId = data.contestId;
+                    
+                    if(data.warning) alert("Note: " + data.warning);
+
+                    renderQuestions(data.problems);
+                    startTimer(time * 60);
+                } else {
+                    alert(data.error || "Failed to start contest");
+                }
+            } catch (e) { console.error(e); alert("Network Error"); }
+        }
+
+        function renderQuestions(probs) {
+            startTime = Date.now();
+            const container = document.getElementById('questionsContainer');
+            container.innerHTML = probs.map((p, i) => `
+                <div class="prob-box" id="pbox-${p.problem_id}">
+                    <div style="font-weight:bold; color:#aaa; margin-bottom:5px;">Problem ${i+1} (${p.category})</div>
+                    <div style="font-size:1.1rem; margin-bottom:15px;">${p.title || "Untitled"}</div>
+                    <div>${p.description || ""}</div>
+                    ${p.figure_url ? `<img src="${p.figure_url}" style="max-height:150px; margin:10px 0;">` : ''}
+                    
+                    <div class="ans-area" style="margin-top:20px;">
+                        <div style="display:flex; gap:10px;">
+                            <input type="text" id="ans-${p.problem_id}" placeholder="Your Answer" style="flex:1;">
+                            <button class="btn-primary sub-btn" style="width:auto;" onclick="submitAnswer(${p.problem_id}, this)">Submit</button>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:0.8rem;">
+                            <span id="msg-${p.problem_id}"></span>
+                            <span id="left-${p.problem_id}" style="color:#aaa;">Submissions left: 3</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            if(window.MathJax) MathJax.typesetPromise();
+        }
+
+        async function submitAnswer(pid, btn) {
+            const ansInput = document.getElementById(`ans-${pid}`);
+            const ans = ansInput.value;
+            if(!ans) return;
+
+            btn.disabled = true;
+            btn.innerText = "Saving...";
+            
+            try {
+                const res = await fetch('/api/contest/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ contestId: currentContestId, problemId: pid, answer: ans })
+                });
+                const data = await res.json();
+                
+                const msgEl = document.getElementById(`msg-${pid}`);
+                const leftEl = document.getElementById(`left-${pid}`);
+
+                if(res.ok) {
+                    msgEl.innerText = "Saved!";
+                    msgEl.style.color = "var(--green-main)";
+                    leftEl.innerText = `Submissions left: ${data.editsLeft}`;
+                    
+                    if(data.editsLeft <= 0) {
+                        ansInput.disabled = true;
+                        btn.innerText = "Locked";
+                        msgEl.innerText = "Submission limit reached.";
+                    } else {
+                        setTimeout(() => { btn.disabled = false; btn.innerText = "Update"; }, 1000);
+                    }
+                } else {
+                    msgEl.innerText = data.error;
+                    msgEl.style.color = "var(--red-main)";
+                    if(data.error.includes("limit reached")) {
+                        ansInput.disabled = true;
+                        btn.innerText = "Locked";
+                    } else {
+                        btn.disabled = false;
+                        btn.innerText = "Submit";
+                    }
+                }
+            } catch(e) {
+                btn.disabled = false;
+                btn.innerText = "Retry";
+            }
+        }
+
+        function startTimer(seconds) {
+            const display = document.getElementById('timerDisplay');
+            let remaining = seconds;
+            display.style.display = 'inline-block';
+            
+            timerInterval = setInterval(() => {
+                remaining--;
+                const m = Math.floor(remaining / 60).toString().padStart(2, '0');
+                const s = (remaining % 60).toString().padStart(2, '0');
+                display.innerText = `${m}:${s}`;
+
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    finishContest();
+                }
+            }, 1000);
+        }
+
+        async function finishContest() {
+            clearInterval(timerInterval);
+            document.getElementById('endBtn').disabled = true;
+            document.getElementById('endBtn').innerText = "Finishing...";
+
+            const timeTaken = Math.floor((Date.now() - startTime) / 1000);
+
+            try {
+                const res = await fetch('/api/contest/finish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ contestId: currentContestId, timeTaken: timeTaken })
+                });
+                const data = await res.json();
+
+                document.getElementById('contestUI').style.display = 'none';
+                document.getElementById('timerDisplay').style.display = 'none';
+                document.getElementById('summaryUI').style.display = 'block';
+
+                document.getElementById('sumTotal').innerText = data.total;
+                document.getElementById('sumScore').innerText = data.score.toFixed(2);
+                document.getElementById('sumCorrect').innerText = data.correct;
+                document.getElementById('sumWrong').innerText = data.incorrect;
+                
+                const submitted = data.submitted;
+                const acc = submitted > 0 ? ((data.correct / submitted) * 100).toFixed(1) : 0;
+                document.getElementById('sumAcc').innerText = `${acc}%`;
+                document.getElementById('viewOverviewBtn').onclick = () => {
+                    window.location.href = `/contest-history.html?id=${data.publicId}`;
+                };
+
+            } catch(e) { 
+                console.error(e);
+                alert("Error finishing contest. Check console."); 
+            }
+        }
+
+        function toggleReview() {
+            const ui = document.getElementById('contestUI');
+            const btn = document.getElementById('endBtn');
+            const timer = document.getElementById('timerDisplay');
+            
+            if(ui.style.display === 'none') {
+                ui.style.display = 'block';
+                btn.style.display = 'none';
+                timer.style.display = 'none';
+                document.getElementById('resultUI').style.display = 'none';
+                
+                if(!document.getElementById('backToResBtn')) {
+                    const backBtn = document.createElement('button');
+                    backBtn.id = 'backToResBtn';
+                    backBtn.className = 'btn-primary';
+                    backBtn.innerText = "Back to Results";
+                    backBtn.style.marginTop = "20px";
+                    backBtn.onclick = () => {
+                        ui.style.display = 'none';
+                        document.getElementById('resultUI').style.display = 'block';
+                    };
+                    ui.appendChild(backBtn);
+                }
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>
